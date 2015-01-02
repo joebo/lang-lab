@@ -10,7 +10,6 @@ proc JSetM(j:int,name:cstring, t: ptr int, r: ptr int, s: ptr ptr int, d: ptr in
 
 var jt = JInit()
 
-
 proc getShape(r: int, sptr: ptr int): seq[int] =
   toSeq(0..r-1).mapIt(int, cast[ptr int](cast[int](sptr) + it * sizeof(int))[])
 
@@ -26,8 +25,6 @@ proc getData[T](t: int, r: int, sptr: ptr int, d: int): seq[seq[T]] =
         var item = toSeq(0..s-1).mapIt(T, cast[ptr T](cast[int](d) + it * sizeof(T))[])
         result.add(item)
     result
-
-    
 
 suite "calling J":
   setup:
