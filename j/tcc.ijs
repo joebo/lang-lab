@@ -3,7 +3,6 @@ load 'task'
 coclass 'tcc'
 
 
-
 TCCPATH=:(jpath,'~bin'), '/tcc'
 DLL=:TCCPATH,'/libtcc_shim.dll'
 RunC=:'"',DLL,'" runc + x *c *c x x x'
@@ -27,11 +26,9 @@ DLL_EXPORT void* tcc_init (char*tcc_path) {
     if (!_state) {
         return -1;
     }
-    /* if tcclib.h and libtcc1.a are not installed, where can we find them */
     tcc_set_lib_path(_state, tcc_path);
-    //tcc_add_sysinclude_path(_state, tcc_path);
+    tcc_add_sysinclude_path(_state, tcc_path);
 
-    /* MUST BE CALLED before any compilation */
     tcc_set_output_type(_state, TCC_OUTPUT_MEMORY);
     return 1;
 }
@@ -83,11 +80,9 @@ DLL_EXPORT int runc (char *prog, char*tcc_path, long mem, int len, int arg)
         return -1;
     }
 
-    /* if tcclib.h and libtcc1.a are not installed, where can we find them */
     tcc_set_lib_path(s, tcc_path);
-    //tcc_add_sysinclude_path(s, tcc_path);
+    tcc_add_sysinclude_path(s, tcc_path);
 
-    /* MUST BE CALLED before any compilation */
     tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
 
     //printf("prog: %s\n", prog);
@@ -103,19 +98,19 @@ DLL_EXPORT int runc (char *prog, char*tcc_path, long mem, int len, int arg)
        You may also open a dll with tcc_add_dll() and use symbols from that */
     //tcc_add_symbol(s, "add", add);
 
-    /* relocate the code */
+    
     if (tcc_relocate(s, TCC_RELOCATE_AUTO) < 0)
         return -1;
 
-    /* get entry symbol */
+    
     func = tcc_get_symbol(s, "func");
     if (!func)
         return -1;
 
-    /* run the code */
+    
     return func(mem,len, arg);
 
-    /* delete the state */
+    
     tcc_delete(s);
 
 }
@@ -261,26 +256,45 @@ void free2(long ptr) {
  free(ptr);
 }
 
-long infix(long pmem, long len, int infixLen, long long *out) {
-    long long allocLen = len*sizeof(char)*infixLen;
+long infixs(long pmem, long len, int infixLen, long *out) {
+    long allocLen = len*sizeof(char)*infixLen;
     char *newMem = (char*)malloc(allocLen);
     char *mem = (char*)pmem;
 
-    printf("len: %d\n", len);
-    fflush(stdout);
-    long long offset = 0;
-    long long idx = 0;
+    long offset = 0;
+    long idx = 0;
 
-    for(long long i=0;i<len && ((len-offset) >= infixLen);i++) {
-        for(long q=0;q<infixLen;q++) {
+    while(1) {
+        for(int q=0;q<infixLen;q++) {
             newMem[idx++] = mem[q+offset];
         }
         offset++;
+        if ((len-offset) <= infixLen) {
+           break;
+        }
     }
-
     *out = idx;
     return newMem;
 }
+long infix(long pmem, long len, int infixLen, long *out) {
+    long allocLen = len*sizeof(char)*infixLen;
+    char *newMem = (char*)malloc(allocLen);
+    char *mem = (char*)pmem;
+
+    int d = 1+len-infixLen;
+
+    char *x=newMem;
+    char *y=mem;
+    for(int i=0;i<d;i++) {
+        memcpy(x,y,infixLen);
+        x+=infixLen;
+        y+=1;
+    }
+
+    *out = (d*sizeof(char)*infixLen);
+    return newMem;
+}
+
 )
 
 infix=: 3 : 0
@@ -295,9 +309,24 @@ smoutput ret
 'memPtr size'=: ret
 output =: memr memPtr,0,size
 execInt_tcc_ 'free';memPtr;0
-free_tcc_''
+NB. free_tcc_''
 output
 )
+
+infixf=: 3 : 0
+txt=:y
+addr=. mema 4*(#txt)
+txt memw addr,0,(#txt)
+infixSize=.9
+ret=:execIntOutInt_tcc_ 'infix';addr;(#txt);infixSize
+smoutput ret
+'memPtr size'=: ret
+output =: memr memPtr,0,size
+execInt_tcc_ 'free';memPtr;0
+NB. free_tcc_''
+NB. output
+)
+
 
 testInfix =: 3 : 0
 txt=. 'abcdefghijklmnopqrstuvwxyz'
@@ -310,3 +339,4 @@ testInfix''
 NB. cdf''
 
 NB. exit''
+
