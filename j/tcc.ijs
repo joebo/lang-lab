@@ -368,8 +368,8 @@ struct ThreadData {
        LONG len;
 };
 
-int  infixThreaded(void *data) {
-    ThreadData *args = (ThreadData*)data;
+int  infixThreaded(void *threadData) {
+    ThreadData *args = (ThreadData*)threadData;
     LONG infixLen = args->infixLen;
     LONG blockSize = (args->d+(THREADS-1))/THREADS;
     LONG d = args->d;
@@ -409,11 +409,11 @@ int infix(void* pmem, LONG len, LONG infixLen, LONG *out) {
        return -1;
     }
 
-
     char *mem = (char*)pmem;
     LONG d = 1+len-infixLen;
 
-    
+
+    //skip threads for small args
     if (d < 1000000) {
         char *x=newMem;
         char *y=mem;
@@ -425,19 +425,20 @@ int infix(void* pmem, LONG len, LONG infixLen, LONG *out) {
     } else {
 
         HANDLE* threads = (HANDLE*)malloc(sizeof(HANDLE)*THREADS);
-
+        ThreadData **args = (ThreadData**)malloc(sizeof(ThreadData)*THREADS);
         for(int i=0;i<THREADS;i++) {
-            ThreadData *args = (ThreadData*)malloc(sizeof(ThreadData));
-            args->mem = pmem;
-            args->threadId = i;
-            args->d = d;
-            args->infixLen = infixLen;
-            args->newMem = newMem;
-            args->len = len;
-            threads[i] = _beginthreadex(NULL, 0, &infixThreaded, args, 0, NULL);
+            ThreadData *arg = (ThreadData*)malloc(sizeof(ThreadData));
+            arg->mem = pmem;
+            arg->threadId = i;
+            arg->d = d;
+            arg->infixLen = infixLen;
+            arg->newMem = newMem;
+            arg->len = len;
+            args[i] = arg;
+            threads[i] = _beginthreadex(NULL, 0, &infixThreaded, arg, 0, NULL);
         }
         WaitForMultipleObjects(THREADS, threads, 1, INFINITE);
-        for(int i = 0; i<THREADS; i++) { CloseHandle(threads[i]); }
+        for(int i = 0; i<THREADS; i++) { CloseHandle(threads[i]); free(args[i]); }
         free(threads);
     }
 
@@ -445,7 +446,7 @@ int infix(void* pmem, LONG len, LONG infixLen, LONG *out) {
 
     fflush(stdout);
     *out = (d*infixLen);
-    return (void*)newMem;
+    return newMem;
 }
 
 )
