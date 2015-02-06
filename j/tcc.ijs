@@ -19,6 +19,8 @@ SHIMCODE =: 0 : 0
 
 #define DLL_EXPORT __declspec(dllexport)
 
+#define LONG long long
+
 static TCCState *_state;
 
 DLL_EXPORT void* tcc_init (char*tcc_path) {
@@ -55,8 +57,8 @@ DLL_EXPORT int tcc_exec_int (char *funcName, long mem, int len, int arg) {
     return func(mem,len, arg);
 }
 
-DLL_EXPORT int tcc_exec_int_long (char *funcName, long mem, long len, int arg, long long *out) {
-    int (*func)(int,long, int, long*);
+DLL_EXPORT int tcc_exec_int_long (char *funcName, void*mem, LONG len, LONG arg, LONG *out) {
+    int (*func)(int,LONG, LONG, LONG*);
     func = tcc_get_symbol(_state, funcName);
     if (!func)
         return -1;
@@ -256,7 +258,7 @@ void free2(long ptr) {
  free(ptr);
 }
 
-long infixs(long pmem, long len, int infixLen, long *out) {
+long infixslow(long pmem, long len, int infixLen, long *out) {
     long allocLen = len*sizeof(char)*infixLen;
     char *newMem = (char*)malloc(allocLen);
     char *mem = (char*)pmem;
@@ -313,30 +315,181 @@ NB. free_tcc_''
 output
 )
 
-infixf=: 3 : 0
-txt=:y
-addr=. mema 4*(#txt)
-txt memw addr,0,(#txt)
-infixSize=.9
-ret=:execIntOutInt_tcc_ 'infix';addr;(#txt);infixSize
-smoutput ret
-'memPtr size'=: ret
-output =: memr memPtr,0,size
-execInt_tcc_ 'free';memPtr;0
-NB. free_tcc_''
-NB. output
-)
-
-
 testInfix =: 3 : 0
 txt=. 'abcdefghijklmnopqrstuvwxyz'
 infix txt
 )
-test1''
-test1a''
-test2''
-testInfix''
+
+threadTest_code=: 0 : 0
+#include <stdio.h>
+#include <windows.h>
+#include <process.h>
+
+void loop(void *arg) {
+printf ("Thread #: %d\n", arg);
+fflush(stdout);
+return 0;
+}
+
+int func(long pmem, long len) {
+  printf("hello\n");
+  fflush(stdout);
+  _beginthread( loop, 1, 1 );
+  return 1;
+}
+)
+
+testThread =: 3 : 0
+ret=.runc_tcc_ threadTest_code;0;0
+)
+
+testInfixThreaded_code=: 0 : 0
+#include <stdio.h>
+#include <windows.h>
+#include <process.h>
+
+#define LONG long long
+
+const int THREADS = 4;
+void free(void* ptr) {
+ //free wont work since we use VirtualAlloc
+ //free(ptr);
+ VirtualFree(ptr, 0, MEM_RELEASE);
+}
+
+
+typedef struct ThreadData ThreadData;
+struct ThreadData {
+       void *mem;
+       int threadId;
+       LONG d;
+       int infixLen;
+       void *newMem;
+       LONG len;
+};
+
+int  infixThreaded(void *data) {
+    ThreadData *args = (ThreadData*)data;
+    LONG infixLen = args->infixLen;
+    LONG blockSize = (args->d+(THREADS-1))/THREADS;
+    LONG d = args->d;
+    
+    char *x=(char*)args->newMem;
+    char *y=args->mem;
+    LONG ctr = 0;
+
+    for(LONG i=0;i<args->threadId*blockSize;i++) {
+        x+=infixLen;
+        y+=1;
+        ctr+=1;
+    }
+
+
+    for(LONG i=0;i<=blockSize && ctr<=d;i++) {
+        memcpy(x,y,infixLen);
+        //printf("start: %d on thread %d, blockSize : %d\n", ctr, args->threadId, blockSize);
+        x+=infixLen;
+        y+=1;
+        ctr++;
+    }
+
+    return 0;
+}
+
+
+int infix(void* pmem, LONG len, LONG infixLen, LONG *out) {
+    LONG allocLen = len*sizeof(char)*infixLen;
+        
+    //malloc fails on larger than 2gb allocations
+    //char *newMem = (char*)malloc(allocLen);
+    char *newMem = VirtualAlloc(0, allocLen, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (NULL == newMem) {
+       printf("could not allocate\n");
+       fflush(stdout);
+       return -1;
+    }
+
+
+    char *mem = (char*)pmem;
+    LONG d = 1+len-infixLen;
+
+    
+    if (d < 1000000) {
+        char *x=newMem;
+        char *y=mem;
+        for(int i=0;i<d;i++) {
+            memcpy(x,y,infixLen);
+            x+=infixLen;
+            y+=1;
+        }
+    } else {
+
+        HANDLE* threads = (HANDLE*)malloc(sizeof(HANDLE)*THREADS);
+
+        for(int i=0;i<THREADS;i++) {
+            ThreadData *args = (ThreadData*)malloc(sizeof(ThreadData));
+            args->mem = pmem;
+            args->threadId = i;
+            args->d = d;
+            args->infixLen = infixLen;
+            args->newMem = newMem;
+            args->len = len;
+            threads[i] = _beginthreadex(NULL, 0, &infixThreaded, args, 0, NULL);
+        }
+        WaitForMultipleObjects(THREADS, threads, 1, INFINITE);
+        for(int i = 0; i<THREADS; i++) { CloseHandle(threads[i]); }
+        free(threads);
+    }
+
+    printf("done\n");
+
+    fflush(stdout);
+    *out = (d*infixLen);
+    return (void*)newMem;
+}
+
+)
+
+testinfixThreaded=: 3 : 0
+txt=.y
+addr=. mema 4*(#txt)
+txt memw addr,0,(#txt)
+infixSize=.9
+tcc=:init_tcc_''
+compile_tcc_ < testInfixThreaded_code
+ret=:execIntOutInt_tcc_ 'infix';addr;(#txt);infixSize
+NB. smoutput ret
+'memPtr size'=: ret
+output =: memr memPtr,0,size
+execInt_tcc_ 'free';memPtr;0
+smoutput 'done'
+free_tcc_''
+ret
+NB. output
+)
+
+
+NB. test1''
+NB. test1a''
+NB. test2''
+NB. testInfix''
+NB. testThread''
+abc=. 'abcdefghijklmnopqrstuvwxyz'
+NB. testinfixThreaded abc
+
+txt=:fread 'c:/users/joe bogner/downloads/chr2.fa'
+txt=:(txt #~ -. LF = txt)
+
+
+
+
+
+
+  
+  
 NB. cdf''
 
 NB. exit''
 
+NB. testinfixThreaded txt
+6!:2 'testinfixThreaded abc'
