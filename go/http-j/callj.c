@@ -22,7 +22,9 @@ DLL_EXPORT char* jlib_call(char *url, char *body, int *outputLen) {
     int ret = JSetM(j, "url_request_", &typei, &ranki, &pshapei, &pdata);
     
     shapei[0] = strlen(body);
+    pdata=body;
     ret = JSetM(j, "body_request_", &typei, &ranki, &pshapei, &pdata);
+    
     ret = JDo(j, "0!:0 <'server.ijs'");
     //printf("ret: %d\n", ret);
 
