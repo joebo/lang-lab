@@ -21,14 +21,14 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-// From: https://code.google.com/p/go/source/browse/src/pkg/net/interface_windows.go
-func bytePtrToString(p uintptr) string {
-    a := (*[10000]uint8)(unsafe.Pointer(p))
-    i := 0
-    for a[i] != 0 {
-        i++
-    }
-    return string(a[:i])
+
+//hacky
+func bytePtrToString(p uintptr, len int) string {
+	a:=make([]uint8,len+1);
+	for i := 0; i < len; i++ {
+		a[i] = (*[1]uint8)(unsafe.Pointer(p+uintptr(i)))[0]
+	}
+	return string(a[:len])
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -42,17 +42,18 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, _ := syscall.BytePtrFromString(string(body[:]))
 	var bodyPtr = unsafe.Pointer(bodyBytes)
 	
-	//fmt.Println("GO URL:", r.URL.RequestURI());
 	var responseLen uint32 = 0;
 	ret, _, _ := syscall.Syscall6(uintptr(callJ), 3, uintptr(urlPtr), uintptr(bodyPtr), uintptr(unsafe.Pointer(&responseLen)), 0,0,0)
-	//fmt.Println(responseLen)
 
-	var output = bytePtrToString(ret)
-	//fmt.Println(output)
+
+	var output = bytePtrToString(ret, int(responseLen))
+
 	if ret == 0 {
 		fmt.Println("error");
 	}
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprintf(w, output);
+
+	syscall.Syscall6(uintptr(freeJMem), 1, uintptr(ret),0,0,0,0,0);
 }
 
