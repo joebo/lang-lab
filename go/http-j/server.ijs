@@ -47,7 +47,7 @@ renderLayout '<textarea style="width:500px;height:300px">',(htmlEncode google),'
 sourceController =: 3 : 0
 loadProfile''
 page=. 1!:1 <'server.ijs'
-renderLayout '<pre>',(htmlEncode page),'<pre>'
+renderLayout '<pre>',(htmlEncode page),'</pre>'
 )
 
 sleepController =: 3 : 0
