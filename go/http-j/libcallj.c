@@ -78,6 +78,16 @@ DLL_EXPORT char* jlib_call(char *url, char *body, int *outputLen) {
   pdata=body;
   ret = JSetM(j, "body_request_", &typei, &ranki, &pshapei, &pdata);
   ret = JDo(j, "0!:0 <'server.ijs'");
+  printf("ret: %d\n", ret);
+  if (ret!=0) {
+      char error[] = "parsing error";
+      int len = strlen(error);
+      char *output = (char*)malloc(sizeof(char)*len);
+      strcpy(output, error);
+      *outputLen = len;
+      JFree(j);
+      return output;
+  }
   //printf("ret: %d\n", ret);
 
     
@@ -90,7 +100,7 @@ DLL_EXPORT char* jlib_call(char *url, char *body, int *outputLen) {
   //printf("ret: %d, type: %d, rank: %d, shape: %d", ret, type, rank, shape[0]);
     
   int len = shape[0];
-  char *output = (char*)malloc(sizeof(char)*len);
+  char *output = (char*)malloc(sizeof(char)*(len+1));
   strcpy(output, (char*)pvals);
   *outputLen = len;
   printf("\nresponse is: %s\n", output);
