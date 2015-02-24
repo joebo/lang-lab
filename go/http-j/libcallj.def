@@ -1,4 +1,4 @@
-LIBRARY callj.dll
+LIBRARY libcallj.dll
 
 EXPORTS
 jlib_call

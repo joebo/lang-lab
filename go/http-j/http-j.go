@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	calljdll, _        = syscall.LoadLibrary("callj.dll")
+	calljdll, _        = syscall.LoadLibrary("libcallj.dll")
 	callJ, _ = syscall.GetProcAddress(calljdll, "jlib_call")
 	freeJMem, _ = syscall.GetProcAddress(calljdll, "jlib_freemem")
 )        
