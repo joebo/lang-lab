@@ -38,7 +38,20 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	urlBytes, _ := syscall.BytePtrFromString(url)
 	var urlPtr = unsafe.Pointer(urlBytes);
 
+	
 	body, _ := ioutil.ReadAll(r.Body)
+
+	var buffer bytes.Buffer
+
+	for _, c := range r.Cookies() {
+		buffer.WriteString("COOKIE: ")
+		buffer.WriteString(c.Name)
+		buffer.WriteString(" ")
+		buffer.WriteString(c.Value)
+		buffer.WriteString("\n")
+   	}
+	buffer.WriteString("\x1FBODY: ")
+	buffer.WriteString(string(body[:]))
 
 	bodyBytes, _ := syscall.BytePtrFromString(string(body[:]))
 	var bodyPtr = unsafe.Pointer(bodyBytes)
@@ -51,8 +64,28 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	//TODO: http://stackoverflow.com/questions/19060015/integrating-existing-c-code-to-go-convert-unsigned-char-poiner-result-to-byte
 	var output = bytePtrToString((uintptr)(unsafe.Pointer(ret)), int(responseLen))
 
-	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprint(w, output)
+	var headerEnd = strings.Index(output, "\n\n");
+
+	if headerEnd == -1 {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, output)
+	} else {
+		var headers = strings.Split(output[:headerEnd], "\n")
+		var outputBody = output[headerEnd+1:]
+
+		fmt.Printf("body is %s\n",outputBody)
+		for _, vv := range headers {
+			var header = strings.Split(vv, ":")
+			w.Header().Set(header[0], strings.Trim(header[1], " "))	
+		}
+		if len(headers) > 0 && strings.Contains(headers[0], "Location:") {
+			var url = strings.Split(headers[0], ":")
+			http.Redirect(w, r, strings.Trim(url[1], " "), http.StatusFound)
+		}
+
+		fmt.Fprint(w, outputBody)
+	}
+
 
 	C.jlib_freemem((*C.char)(ret))
 
