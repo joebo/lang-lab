@@ -33,7 +33,7 @@ loadProfile =: 3 : 0
 cwd=.1!:43''
 0!:0 <(cwd,'/environment.ijs')
 ARGV_z_=:''
-(3 : '0!:0 y')<BINPATH,'\profile.ijs'
+(3 : '0!:0 y')<BINPATH,'/profile.ijs'
 )
 
 googleController =: 3 : 0
