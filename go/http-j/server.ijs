@@ -5,12 +5,19 @@ cut=: ' '&$: :([: -.&a: <;._2@,~)
 dispatch =: 3 : 0
 if. url_request_ -: '/form/' do. formController ''
 elseif. url_request_ -: '/sleep/' do. sleepController ''
+elseif. url_request_ -: '/source/' do. sourceController ''
 elseif. do. defaultController ''
 end.
 )
 
 renderLayout =: 3 : 0
 response_request_ =: y,IndexHtml
+)
+
+sourceController =: 3 : 0
+page=. 1!:1 <'server.ijs'
+
+renderLayout '<pre>',page,'<pre>'
 )
 
 sleepController =: 3 : 0
@@ -35,8 +42,10 @@ renderLayout Greeting,FormHtml
 IndexHtml =: 0 : 0
 <h1>Menu</h1>
 <a href="/form/">Form Example</a><br>
-<a href="/sleep/">Sleep Example (Will take 5 seconds to complete, but you can do other things in other tabs)</a>
+<a href="/sleep/">Sleep Example (Will take 5 seconds to complete, but you can do other things in other tabs)</a><br>
+<a href="/source/">View Page Source</a>
 <br><br>
+<a href="https://github.com/joebo/lang-lab/tree/master/go/http-j">github</a><br><br>
 )
 
 defaultController =: 3 : 0
