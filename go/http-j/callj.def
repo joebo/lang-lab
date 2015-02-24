@@ -1,5 +1,0 @@
-LIBRARY callj.dll
-
-EXPORTS
-jlib_call
-jlib_freemem
