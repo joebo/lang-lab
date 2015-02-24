@@ -52,9 +52,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	var output = bytePtrToString((uintptr)(unsafe.Pointer(ret)), int(responseLen))
 
 	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, output);
+	fmt.Fprint(w, output)
 
-	C.jlib_freemem((*C.char)(ret));
+	C.jlib_freemem((*C.char)(ret))
 
 	/*
 	w.Header().Set("Content-Type", "text/html")

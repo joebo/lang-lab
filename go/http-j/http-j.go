@@ -51,8 +51,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if ret == 0 {
 		fmt.Println("error");
 	}
+
+	//fmt.Println(output)
+
+	
 	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, output);
+	fmt.Fprint(w, output)
+	//fmt.Fprintf(w, "hello world")
 
 	syscall.Syscall6(uintptr(freeJMem), 1, uintptr(ret),0,0,0,0,0);
 }

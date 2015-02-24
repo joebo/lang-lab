@@ -30,7 +30,8 @@ htmlEncode =: 3 : 0
 )
 
 loadProfile =: 3 : 0
-BINPATH_z_=: 'C:\Users\Joe Bogner\j64-802\bin'
+cwd=.1!:43''
+0!:0 <(cwd,'/environment.ijs')
 ARGV_z_=:''
 (3 : '0!:0 y')<BINPATH,'\profile.ijs'
 )
