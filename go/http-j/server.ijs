@@ -7,7 +7,7 @@ if. url_request_ -: '/form/' do. formController ''
 elseif. url_request_ -: '/sleep/' do. sleepController ''
 elseif. url_request_ -: '/source/' do. sourceController ''
 elseif. url_request_ -: '/big/' do. renderLayout 1e6 $ 'foo'
-elseif. url_request_ -: '/test/' do. testController ''
+elseif. url_request_ -: '/google/' do. googleController ''
 elseif. do. defaultController ''
 end.
 )
@@ -35,7 +35,7 @@ ARGV_z_=:''
 (3 : '0!:0 y')<BINPATH,'\profile.ijs'
 )
 
-testController =: 3 : 0
+googleController =: 3 : 0
 loadProfile''
 require 'task'
 google=.shell'curl --silent http://www.google.com'
