@@ -7,6 +7,8 @@ import (
         "syscall"
 	"unsafe"
 	"io/ioutil"
+	"bytes"
+	"strings"
 )
 /*
 #cgo LDFLAGS: -L.  -lcallj -ldl
