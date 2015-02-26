@@ -13,6 +13,7 @@ elseif. url_request_ -: '/google/' do. googleController ''
 elseif. url_request_ -: '/redirect/' do. redirectController ''
 elseif. url_request_ -: '/cookie/' do. cookieController ''
 elseif. url_request_ -: '/cookieAfter/' do. cookieAfterController ''
+elseif. url_request_ -: '/ipLookup/' do. ipLookupController ''
 elseif. do. defaultController ''
 end.
 )
@@ -40,6 +41,10 @@ renderLayout =: 3 : 0
 response_request_ =: ('Content-Type: text/html',LF,LF),(y,IndexHtml)
 )
 
+ipLookupController =: 3 : 0
+loadProfile''
+0!:0 <'c:/joe/lang-lab/j/geo-ip.ijs'
+)
 redirectController =: 3 : 0
 response_request_ =: ('Location: /',LF,LF)
 )
