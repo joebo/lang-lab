@@ -57,6 +57,9 @@ ACD| 1184
 q)\t select last bid by sym from quote
 156
 
+q)\t select count bid by sym from quote
+187
+
 )
 
 Note 'J'
@@ -103,9 +106,8 @@ J queries are about 4x slower (0.2 vs 0.96, but overall it was faster)
 6!:2 '(~.sym); (sym {:/.bid)'
 0.968643
 
-{: isn't overly optimized for this.. however count is and runs at the same speed as K
+{: isn't overly optimized for this.. however count is and runs even faster than K
 
-6!:2 '(symIdx #/.bid)'
-0.185369
-   
+6!:2 '(sym #/.bid)'
+0.0973729   
 )
