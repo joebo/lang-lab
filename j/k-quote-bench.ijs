@@ -106,7 +106,46 @@ J queries are about 4x slower (0.2 vs 0.96, but overall it was faster)
 6!:2 '(~.sym); (sym {:/.bid)'
 0.968643
 
-{: isn't overly optimized for this.. however count is and runs even faster than K
+{: isn't overly optimized for this, but we can write our own version that runs nearly as fast
+
+6!:2 '(~.sym);((~. i:~ sym) { bid)'
+0.24893
+
+ |:<"_1@>15{. each ((~.sym);((~. i:~ sym) { bid))
++----+------------+
+|`AAF|1244        |
++----+------------+
+|`AAG|1280        |
++----+------------+
+|`AAI|1297        |
++----+------------+
+|`AAM|1277        |
++----+------------+
+|`AAP|1409        |
++----+------------+
+|`AAT|1433        |
++----+------------+
+|`AAY|1434        |
++----+------------+
+|`AAZ|1064        |
++----+------------+
+|`ABC|1266        |
++----+------------+
+|`ABF|1377        |
++----+------------+
+|`ABH|1307        |
++----+------------+
+|`ABI|1364        |
++----+------------+
+|`ABK|1039        |
++----+------------+
+|`ABL|1323        |
++----+------------+
+|`ABN|1363        |
++----+------------+
+
+
+count is fast and runs even faster than K
 
 6!:2 '(sym #/.bid)'
 0.0973729   
