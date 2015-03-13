@@ -1,4 +1,4 @@
-require 'jmf'
+
 CSV=:'c:/users/joebog~1/downloads/q/q.csv'
 split =: (',',LF) (e.~ ];._1 ]) LF,]
 col=: 4 : 0
@@ -6,7 +6,8 @@ col=: 4 : 0
 )
 getCol =: (] #~ (#@] $ [))
 
-
+NB. attempted to use jmf, but didn't help much since the file wasn't being split and I had to drop the last LF
+NB. require 'jmf'
 NB. len=.1!:4 <CSV
 NB. (JCHAR;len) map_jmf_ 'txt';CSV
 
