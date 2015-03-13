@@ -103,4 +103,9 @@ J queries are about 4x slower (0.2 vs 0.96, but overall it was faster)
 6!:2 '(~.sym); (sym {:/.bid)'
 0.968643
 
+{: isn't overly optimized for this.. however count is and runs at the same speed as K
+
+6!:2 '(symIdx #/.bid)'
+0.185369
+   
 )
