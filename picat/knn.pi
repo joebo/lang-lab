@@ -1,0 +1,95 @@
+import util.
+% Arr={A:L in 1..length(Lines), Z=Lines[L], A={N: C in Z.split(","), N=parse_term(C)}}
+
+matrix_square_sub_total(M) = M3 =>
+    M2 = new_array(M.length),
+    foreach(N in 1..M2.length)
+        M2[N] := new_array(M.length,M[1].length),
+        foreach(I in 1..M.length, J in 1..M[1].length)
+          M2[N,I,J] := (M[N,J] - M[I,J]) * (M[N,J] - M[I,J])
+        end
+    end,
+    M3 = new_array(M.length, M.length),
+    foreach(I in 1..M.length, J in 1..M.length)
+        M3[I,J] = sum([M2[I,J,K] : K in 1..M[1].length])
+    end.
+
+grade_up(L) = [ I : (E,I) in sort([(E,I) : {E,I} in zip(L,1..L.length)])].
+
+knn(K,M) = Ret =>    
+    M2 = matrix_square_sub_total(M),
+    % writeln(M2),
+    Ret = new_array(M2.length, M2[1].length),
+    foreach(I in 1..M2.length)
+        Count:=1,
+        Sort = tail(grade_up(rows(M2[I]))),
+        foreach(J in 1..M2[1].length)
+            % sort by the difference from the current value
+            if I==J then % skip self
+                Val = ''
+            elseif J==Sort[Count] && Count <= K  then
+                Val = M2[I,J],
+                Count := Count + 1
+            else
+                Val = ''
+            end,    
+            Ret[I,J] = Val
+       end
+    end,
+    % make symmetric
+    T=transpose(Ret),
+    foreach(I in 1..M2.length, J in 1..M2[1].length)
+        if Ret[I,J] == '' && T[I,J] != '' then
+            Ret[I,J] := T[I,J]
+        end
+    end,
+    true.
+
+main=>
+    M = {{0,1,2,3,4},{5,6,7,8,9},{10,11,12,13,14},{15,16,17,18,19},{20,21,22,23,24}},
+    Arr = knn(1,M),
+    writeln(Arr),
+    true.
+
+/*
+
+Picat> L=knn(1,{{0,1,2},{3,4,5},{6,7,8}})
+L = {{'',27,''},{27,'',27},{'',27,''}}
+
+
+1 knn i. 3 3
+ _ 27 _
+27  _ _
+ _ 27 _
+
+
+Picat> L=knn(2,{{0,1,2},{3,4,5},{6,7,8}})
+L = {{'',27,108},{27,'',27},{108,27,''}}
+
+2 knn i. 3 3
+  _ 27 108
+ 27  _  27
+108 27   _
+
+
+Picat> L=knn(1,{{0,1,2,3},{4,5,6,7},{8,9,10,11},{12,13,14,15}})
+L = {{'',64,'',''},{64,'',64,''},{'',64,'',64},{'','',64,''}}
+
+1 knn i. 4 4
+ _ 64  _  _
+64  _ 64  _
+ _ 64  _ 64
+ _  _ 64  _
+
+
+
+Picat> L=knn(2,{{0,1,2},{3,4,5},{6,7,8},{9,10,11,12}})
+L = {{'',27,108,''},{27,'',27,''},{108,27,'',27},{'','',27,''}}
+
+ 2 knn i. 4 3
+  _  27 108   _
+ 27   _  27 108
+108  27   _  27
+  _ 108  27   _
+   
+*/
