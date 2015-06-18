@@ -2,16 +2,9 @@ import util.
 % Arr={A:L in 1..length(Lines), Z=Lines[L], A={N: C in Z.split(","), N=parse_term(C)}}
 
 matrix_square_sub_total(M) = M3 =>
-    M2 = new_array(M.length),
-    foreach(N in 1..M2.length)
-        M2[N] := new_array(M.length,M[1].length),
-        foreach(I in 1..M.length, J in 1..M[1].length)
-          M2[N,I,J] := (M[N,J] - M[I,J]) * (M[N,J] - M[I,J])
-        end
-    end,
     M3 = new_array(M.length, M.length),
     foreach(I in 1..M.length, J in 1..M.length)
-        M3[I,J] = sum([M2[I,J,K] : K in 1..M[1].length])
+        M3[I,J] = sum([pow(M[I,K]-M[J,K],2) : K in 1..M[1].length])
     end.
 
 grade_up(L) = [ I : (E,I) in sort([(E,I) : {E,I} in zip(L,1..L.length)])].
