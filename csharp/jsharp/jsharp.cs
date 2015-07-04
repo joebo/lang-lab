@@ -2,15 +2,27 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-//new JSharp().parse("+/ (i. 100");
+using System.Diagnostics;
+
 
 public class Program
 {
-    public static void Main()
+    public static void Main(string[] args)
     {
-        var jt = new JSharp();
-        jt.tests();
-        //new JSharp().parse("+/ i. 2 2 2");
+
+        new JSharp().tests();
+        if (args.Length > 0)
+        {
+            var watch = new Stopwatch();
+            watch.Start();
+            var ret = new JSharp().parse(args[0]);
+            watch.Stop();
+            Console.WriteLine(ret.ri[0]);
+            Console.WriteLine(String.Format("Took: {0} ms", watch.ElapsedMilliseconds));
+        }
+        //var jt = new JSharp();
+        //jt.tests();
+
         //fail
         //Console.WriteLine(new JSharp().parse("+/ i. 3").ri[0].ToString());
         //parse("+/ (i. 1000000)").Dump();
@@ -20,7 +32,6 @@ public class Program
 
 public class JSharp
 {
-
     public enum Type { Undefined, Int, String, Double, Verb };
 
     public class Verb
@@ -29,7 +40,6 @@ public class JSharp
         public Func<A, A, A> dyad;
         public Func<Func<A, A, A>, A, A> adverb;
     }
-
     public class A
     {
 
@@ -54,7 +64,6 @@ public class JSharp
         {
             int val;
 
-            //move to stack parsing
             if (word.Contains(" "))
             {
                 var longs = new List<long>();
@@ -79,6 +88,16 @@ public class JSharp
             }
         }
 
+        //todo add other conversions
+        public A Convert(Type Type) {
+            A z = new A(Type,Count);
+            if (this.Type == Type.Int && Type == Type.Double) {
+                for(var i = 0; i < Count; i++ ) {
+                    z.rd[i] = (double) this.ri[i];
+                }
+            }
+            return z;
+        }
         public override string ToString()
         {
             if (Type == Type.Int && Count > 0)
@@ -88,8 +107,7 @@ public class JSharp
             return "";
         }
 
-        public A(Type type, long n, double y)
-            : this(type, n)
+        public A(Type type, long n, double y) : this(type, n)
         {
             rd[0] = y;
         }
@@ -136,7 +154,28 @@ public class JSharp
         return v;
     }
 
-    A add(A x, A y)
+    
+    double addd(double a, double b) { return a+b; }
+    long addi(long a, long b) { return a+b; }
+    double subd(double a, double b) { return a-b; }
+    long subi(long a, long b) { return a-b; }
+    double divided(double a, double b) { return a/b; }
+    long dividei(long a, long b) { return a/b; }
+ 
+    A add(A x, A y) {
+        return math(x,y,addi,addd);
+    }
+    A subtract(A x, A y) {
+        return math(x,y,subi,subd);
+    }
+    A divide(A x, A y) {
+        if (y.Type == Type.Int) {
+            y = y.Convert(Type.Double);
+        }
+        return math(x,y,dividei,divided);
+    }
+    
+    A math(A x, A y, Func<long, long, long> intop, Func<double, double, double> doubleop)
     {
         Type type = Type.Undefined;
         if (y.Type == x.Type) { type = y.Type; }
@@ -145,11 +184,11 @@ public class JSharp
         var v = new A(type, y.Count);
         if (type == Type.Int)
         {
-            for (var i = 0; i < y.Count; i++) v.SetInt(i, x.AsInt(i * (x.Count == y.Count ? 1 : 0)) + y.AsInt(i));
+            for (var i = 0; i < y.Count; i++) v.SetInt(i, intop(x.AsInt(i * (x.Count == y.Count ? 1 : 0)),y.AsInt(i)));
         }
         else if (type == Type.Double)
         {
-            for (var i = 0; i < y.Count; i++) v.SetDouble(i, x.AsDouble(i * (x.Count == y.Count ? 1 : 0)) + y.AsDouble(i));
+            for (var i = 0; i < y.Count; i++) v.SetDouble(i, doubleop(x.AsDouble(i * (x.Count == y.Count ? 1 : 0)), y.AsDouble(i)));
         }
         else
         {
@@ -247,6 +286,10 @@ public class JSharp
     {
         return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
     }
+    bool equals(double[] a1, params double[] a2)
+    {
+        return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
+    }
 
     public A parse(string cmd)
     {
@@ -255,7 +298,9 @@ public class JSharp
 
 
         verbs["+"] = makeVerb(null, add);
+        verbs["-"] = makeVerb(null, subtract);
         verbs["*"] = makeVerb(null, multiply);
+        verbs["%"] = makeVerb(null, divide);
         verbs["i."] = makeVerb(iota, null);
         verbs["sum"] = makeVerb(iota, add);
 
@@ -409,6 +454,11 @@ public class JSharp
         tests["adverb +/"] = () => equals(toWords("+/ 1 2 3"), new string[] { "+", "/", "1 2 3" });
 
         //parse tests
+        tests["basic add"] = () => equals(parse("1 + 3").ri, new long[] { 4 });
+        tests["basic subtract"] = () => equals(parse("5 - 3").ri, new long[] { 2 });
+        tests["basic multiply"] = () => equals(parse("5 * 3").ri, new long[] { 15 });
+        //tests["basic divide"] = () => equals(parse("15 % 3").ri, new long[] { 5 });
+        tests["basic divide"] = () => equals(parse("1 % 4").rd, new double[] { 0.25 });
         tests["iota"] = () => equals(parse("i. 3").ri, new long[] { 0, 1, 2 });
         tests["adds 1 to iota"] = () => equals(parse("1 + i. 3").ri, new long[] { 1, 2, 3 });
         tests["adverb +/"] = () => equals(parse("+/ 2 2 2").ri, new long[] { 6 });
