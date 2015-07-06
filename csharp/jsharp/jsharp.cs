@@ -10,7 +10,7 @@ namespace App {
     {
         public static void Main(string[] args)
         {
-            //System.Diagnostics.Debugger.Launch();
+            System.Diagnostics.Debugger.Launch();
             if (args.Length > 0)
             {
                 long kbAtExecution = GC.GetTotalMemory(false) / 1024;
@@ -36,7 +36,7 @@ namespace App {
 
 namespace JSharp
 {
-    public enum Type { Undefined, Int, String, Double, Verb, Int32 };
+    public enum Type { Undefined, Int, String, Double, Verb, Int32, Bool };
 
     public class Verb {
         public Func<A, A> monad;
@@ -54,7 +54,8 @@ namespace JSharp
         public string[] rs;
         public double[] rd;
         public Verb Verb;
-
+        public bool[] rb;
+        
         public A(Type type, long n, int rank=0,long[] shape=null) {
             Type = type;
             Count = n;
@@ -62,6 +63,7 @@ namespace JSharp
             if (Type == Type.Int) { ri = new long[n]; }
             else if (Type == Type.Double) { rd = new double[n]; }
             else if (Type == Type.Int32) { ri32 = new int[n]; }
+            else if (Type == Type.Bool) { rb = new bool[n]; }
             Rank = rank;
             Shape = shape;
         }
@@ -75,10 +77,18 @@ namespace JSharp
                     longs.Add(Int32.Parse(part));
                 }
                 Rank = 1;
-                Type = Type.Int;
-                ri = longs.ToArray();
+
+                //can convert to bool
+                if (longs.Where(x=>x!=0&&x!=1).Count() == 0) {
+                    Type = Type.Bool;
+                    rb = longs.Select(x=>System.Convert.ToBoolean(x)).ToArray();
+                } else {
+                    Type = Type.Int;
+                    ri = longs.ToArray();
+                }
                 Count = longs.Count;
                 Shape = new long[] { Count };
+
 
             }
             else if (word.Contains(" ") && word.Contains(".")) {
@@ -121,6 +131,12 @@ namespace JSharp
                     z.rd[i] = (double) this.ri[i];
                 }
             }
+            if (this.Type == Type.Bool) {
+                for(var i = 0; i < Count; i++ ) {
+                    z.ri[i] = System.Convert.ToInt32(this.rb[i]);
+                }
+            }
+
             return z;
         }
 
@@ -138,6 +154,9 @@ namespace JSharp
             else if (Type == Type.Int32 && Count == 1) {
                 return ri32[0].ToString();
             }
+            else if (Type == Type.Bool && Count == 1) {
+                return (System.Convert.ToInt32(rb[0])).ToString();
+            }
             else if (Count > 1) {
                 var z = new StringBuilder();
                 long[] odometer = new long[Shape.Length];
@@ -145,6 +164,7 @@ namespace JSharp
                     if (Type == Type.Int) { z.Append(ri[i]);}
                     else if (Type == Type.Double) { z.Append(rd[i]);}
                     else if (Type == Type.Int32) { z.Append(ri32[i]);}
+                    else if (Type == Type.Bool) { z.Append(System.Convert.ToInt32(rb[i]));}
                     odometer[Shape.Length-1]++;
 
                     if (odometer[Shape.Length-1] != Shape[Shape.Length-1]) {
@@ -194,6 +214,7 @@ namespace JSharp
             if (Type == Type.Double) { v.rd[0] = rd[i]; }
             else if (Type == Type.Int) { v.ri[0] = ri[i]; }
             else if (Type == Type.Int32) { v.ri32[0] = ri32[i]; }
+            else if (Type == Type.Bool) { v.rb[0] = rb[i]; }
             return v;
         }
 
@@ -210,8 +231,13 @@ namespace JSharp
     }
 
     public static class Verbs {
+
+        public static long prod(long[] ri) {
+            return ri.Aggregate(1L, (prod, next)=> prod*next);
+        }
+        
         public static A iota(A y) {
-            var ct = y.ri.Aggregate(1L, (prod, next)=> prod*next);
+            var ct = prod(y.ri); 
 
             var v = new A(Type.Int, ct, y.ri.Length, y.ri.Length == 1 ? new long[] { y.ri[0] } : y.ri);
             for (var i = 0; i < ct; i++) { v.ri[i] = i; }
@@ -222,6 +248,22 @@ namespace JSharp
             return v;
         }
 
+        public static A reshape(A x, A y) {
+            var ct = prod(x.ri);
+            var v = new A(y.Type, ct, x.Rank, x.ri);
+            long offset = 0;
+            for(var i = 0; i < ct; i++ ) {
+                if (y.Type == Type.Int) { v.ri[i] = y.ri[offset]; }
+                else if (y.Type == Type.Double) { v.rd[i] = y.rd[offset]; }
+                else if (y.Type == Type.Int32) { v.ri32[i] = y.ri32[offset]; }
+                else if (y.Type == Type.Bool) { v.rb[i] = y.rb[offset]; }
+
+                offset++;
+                if (offset > y.Count-1) { offset = 0; }
+            }
+            return v;
+        }
+        
         public static A transpose(A y) {
             var shape = y.Shape.Reverse().ToArray();
             var v = new A(y.Type, y.Count, y.Rank, shape);
@@ -268,6 +310,15 @@ namespace JSharp
         public static A math(A x, A y, Func<long, long, long> intop, Func<double, double, double> doubleop) {
 
             Type type = Type.Undefined;
+
+            //upcast bools
+            if (y.Type == Type.Bool) {
+                y = y.Convert(Type.Int);
+            }
+            if (x.Type == Type.Bool) {
+                x = x.Convert(Type.Int);
+            }
+            
             if (y.Type == x.Type) { type = y.Type; }
             else if (y.Type == Type.Double || x.Type == Type.Double) { type = Type.Double; }
 
@@ -275,6 +326,7 @@ namespace JSharp
 
             var v = new A(type, y.Count, y.Rank, y.Shape);
             var offsetX =  (x.Count == y.Count ? 1 : 0);
+            
             if (y.Type == Type.Int32)
             {
                 for (var i = 0; i < y.Count; i++) { v.ri[i] = x.ri == null ? x.ri32[i*offsetX] : x.ri[i*offsetX] +  y.ri32[i]; }
@@ -385,7 +437,8 @@ namespace JSharp
             verbs["%"] = makeVerb(null, Verbs.divide);
             verbs["i."] = makeVerb(Verbs.iota, null);
             verbs["|:"] = makeVerb(Verbs.transpose, null);
-        
+            verbs["$"] = makeVerb(null, Verbs.reshape);
+            
             adverbs["/"] = Adverbs.reduce;
 
             var MARKER = "`";
@@ -515,6 +568,9 @@ namespace JSharp
         bool equals(double[] a1, params double[] a2) {
             return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
         }
+        bool equals(bool[] a1, params bool[] a2) {
+            return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
+        }
 
         public void TestAll()
         {
@@ -553,6 +609,7 @@ namespace JSharp
             tests["adverb +/ with number list"] = () => equals(parse("+/ 2 2 2").ri, new long[] { 6 });
             tests["adverb +/ verb"] = () => equals(parse("+/ i. 10").ri, new long[] { 45 });
 
+            tests["reshape bool"] = new Func<bool>(()=> equals(parse("3 $ 1 0 1").rb, new bool[] {true,false,true }));
 
             Func<object, object, object[]> pair = (a,w) => new object[] { a,w };
             var eqTests = new Dictionary<string, object[]>();
@@ -566,6 +623,12 @@ namespace JSharp
             eqTests["multi-dimensional sum higher rank 2"] = pair(parse("+/ i. 4 3 2").ToString(),"36 40\n44 48\n52 56");
             eqTests["tranpose"] = pair(parse("|: i. 2 3").ToString(),"0 3\n1 4\n2 5");
 
+            eqTests["reshape int"] = pair(parse("3 $ 3").ToString(),"3 3 3");
+            eqTests["reshape double"] = pair(parse("3 $ 3.2").ToString(),"3.2 3.2 3.2");
+            eqTests["reshape bool"] = pair(parse("3 $ 0 1").ToString(),"0 1 0");
+            eqTests["upcast math that looks bool"] = pair(parse("+/ 1 1 1").ToString(),"3");
+            
+            
             foreach (var key in tests.Keys) {
                 if (!tests[key]()) {
                     throw new ApplicationException(key);
@@ -580,7 +643,7 @@ namespace JSharp
                     //System.Diagnostics.Debugger.Launch();
                     //System.Diagnostics.Debugger.Break();
 
-                    throw new ApplicationException(key);
+                    //throw new ApplicationException(key);
                 }
             }
         }
