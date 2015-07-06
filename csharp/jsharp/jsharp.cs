@@ -10,16 +10,17 @@ public class Program
     public static void Main(string[] args)
     {
         //System.Diagnostics.Debugger.Launch();
-        new JSharp().tests();
+
         if (args.Length > 0)
         {
             var watch = new Stopwatch();
             watch.Start();
             var ret = new JSharp().parse(args[0]);
             watch.Stop();
-            Console.WriteLine(ret.ri[0]);
+            Console.WriteLine(ret.ToString());
             Console.WriteLine(String.Format("Took: {0} ms", watch.ElapsedMilliseconds));
         }
+        new JSharp().tests();
         //var jt = new JSharp();
         //jt.tests();
 
@@ -53,7 +54,7 @@ public class JSharp
         public A(Type type, long n, int rank=0,long[] shape=null) {
             Type = type;
             Count = n;
-            if (n > 1 && rank == 0) { rank = 1; shape = new long[n]; }
+            if (n > 1 && rank == 0) { rank = 1; shape = new long[1]; shape[0] = n; }
             if (Type == Type.Int) { ri = new long[n]; }
             if (Type == Type.Double) { rd = new double[n]; }
             Rank = rank;
@@ -78,7 +79,7 @@ public class JSharp
             else if (Int32.TryParse(word, out val)) {
                 Type = Type.Int;
                 ri = new long[1];
-                Rank = 1;
+                Rank = 0;
                 Count = 1;
                 ri[0] = val;
             }
@@ -152,8 +153,10 @@ public class JSharp
         public void SetDouble(int i, double val) {
             rd[i] = val;
         }
+
         public A Copy(long i) {
-            A v = new A(Type, 1);
+            A v = null; 
+            v = new A(Type, 1);
             if (Type == Type.Double) { v.rd[0] = rd[i]; }
             if (Type == Type.Int) { v.ri[0] = ri[i]; }
             return v;
@@ -167,16 +170,43 @@ public class JSharp
     }
 
     A iota(A y) {
-        //System.Diagnostics.Debugger.Launch();
-        //System.Diagnostics.Debugger.Break();
         var ct = y.ri.Aggregate(1L, (prod, next)=> prod*next);
-        var v = new A(Type.Int, ct, (int)y.ri[0], y.ri);
+        var v = new A(Type.Int, ct, y.ri.Length, y.ri.Length == 1 ? new long[] { y.ri[0] } : y.ri);
         for (var i = 0; i < ct; i++) { v.ri[i] = i; }
         return v;
     }
 
-    
-   
+    A transpose(A y) {
+        var shape = y.Shape.Reverse().ToArray();
+        var v = new A(y.Type, y.Count, y.Rank, shape);
+        var offsets = new long[y.Shape.Length];
+        for(var i = 1; i <= y.Shape.Length-1; i++) {
+            offsets[(i-1)] = y.Shape.Skip(i).Aggregate(1L, (prod, next)=> prod*next);
+        }
+        offsets[y.Shape.Length-1] = 1;
+        offsets = offsets.Reverse().ToArray();
+        var idx = 0;
+        long[] odometer = new long[shape.Length];
+        for(var i = 0; i < y.Count; i++) {
+            var offset = 0L;
+            for(var k = y.Shape.Length-1;k>=0;k--) {
+                offset = offset + (offsets[k] * odometer[k]);
+            }
+            v.ri[idx] = y.ri[offset];
+            idx++;
+
+            odometer[shape.Length-1]++;
+
+            for(var k = y.Shape.Length-1;k>0;k--) {
+                if (odometer[k] == shape[k]) {
+                    odometer[k] = 0;
+                    odometer[k-1]++;
+                }
+            }
+        }
+
+        return v;
+    }
     A add(A x, A y) { return math(x,y,(a,w)=>(a+w),(a,w)=>(a+w));  }
     A subtract(A x, A y) { return math(x,y,(a,w)=>(a-w),(a,w)=>(a-w)); }
     A multiply(A x, A y) { return math(x,y,(a,w)=>(a*w),(a,w)=>(a*w)); }
@@ -192,7 +222,7 @@ public class JSharp
         if (y.Type == x.Type) { type = y.Type; }
         if (y.Type == Type.Double || x.Type == Type.Double) { type = Type.Double; }
 
-        var v = new A(type, y.Count);
+        var v = new A(type, y.Count, y.Rank, y.Shape);
         if (type == Type.Int)
         {
             for (var i = 0; i < y.Count; i++) v.SetInt(i, intop(x.AsInt(i * (x.Count == y.Count ? 1 : 0)),y.AsInt(i)));
@@ -208,11 +238,43 @@ public class JSharp
         return v;
     }
 
+    public A Merge(A[] y, long length, int rank, long[] shape) {
+        var type = y[0].Type;
+        //var v = new A(type, y.Length, 1, new long[] { y.Length });
+        var v = new A(type, length, rank, shape);
+        for(var i = 0; i < length;i++) {
+            if (type == Type.Int) { v.ri[i] = y[i].ri[0]; }
+            if (type == Type.Double) { v.rd[i] = y[i].rd[0]; }
+        }
+        return v;
+    }
+    
     //todo special code for +/
     A reduce(Func<A, A, A> op, A y) {
-        var v = new A(y.Type, 1);
-        for (var i = 0; i < y.Count; i++) {
-            v = op(v, y.Copy(i)); //copy the ith item for procesing
+        A v = null;
+        //System.Diagnostics.Debugger.Launch();
+        if (y.Rank == 1) {
+            v = new A(y.Type, 1, 0, null);
+            for (var i = 0; i < y.Count; i++) {
+                if (v.Rank == 0) {
+                    v = op(v, y.Copy(i)); //copy the ith item for procesing
+                }
+            }
+        } else {
+            var newShape = y.Shape.Skip(1).ToArray();
+            var ct = newShape.Aggregate(1L, (prod, next) => prod * next);
+            
+            var va = new A[ct];
+            for(var i = 0; i < ct; i++ ){
+                va[i] = new A(y.Type, 1, 0, null);
+            }
+            for(var i = 0; i < ct; i++) {
+                for(var k = 0; k < y.Shape[0];k++) {
+                    var n = i+(k*ct);
+                    va[i] = op(va[i], y.Copy(n));
+                }
+            }
+            return Merge(va, ct, y.Rank-1, newShape);
         }
         return v;
     }
@@ -222,16 +284,6 @@ public class JSharp
         else return verb.Verb.monad(y);
     }
     A call2(A verb, A x, A y) { return verb.Verb.dyad(x, y); }
-
-    A sum(A y) {
-        var v = new A(y.Type, 1);
-        for (var i = 0; i < y.Count; i++)
-        {
-            if (y.Type == Type.Int) v.ri[0] += y.ri[i];
-            if (y.Type == Type.Double) v.rd[0] += y.rd[i];
-        }
-        return v;
-    }
 
     public struct Token {
         public string word;
@@ -282,8 +334,8 @@ public class JSharp
         verbs["*"] = makeVerb(null, multiply);
         verbs["%"] = makeVerb(null, divide);
         verbs["i."] = makeVerb(iota, null);
-        verbs["sum"] = makeVerb(iota, add);
-
+        verbs["|:"] = makeVerb(transpose, null);
+        
         adverbs["/"] = reduce;
 
         var MARKER = "`";
@@ -446,15 +498,21 @@ public class JSharp
         eqTests["string rep number list"] = pair(new A("1 2 3").ToString(),"1 2 3");
         eqTests["multi-dimensional"] = pair(parse("i. 2 3").ToString(),"0 1 2\n3 4 5");
         eqTests["multi-dimensional 2"] = pair(parse("i. 2 2 2").ToString(),"0 1\n2 3\n\n4 5\n6 7");
+        eqTests["multi-dimensional add "] = pair(parse("1 + i. 2 2").ToString(),"1 2\n3 4");
+        eqTests["multi-dimensional sum"] = pair(parse("+/ i. 2 3").ToString(),"3 5 7");
+        eqTests["multi-dimensional sum higher rank"] = pair(parse("+/ i. 2 2 2").ToString(),"4 6\n8 10");
+        eqTests["multi-dimensional sum higher rank"] = pair(parse("+/ i. 4 3 2").ToString(),"36 40\n44 48\n52 56");
+        eqTests["tranpose"] = pair(parse("|: i. 2 3").ToString(),"0 3\n1 4\n2 5");
+        
         foreach (var key in eqTests.Keys) {
             var x=eqTests[key][0];
             var y=eqTests[key][1];
             if (x.ToString() != y.ToString()) {
                 Console.WriteLine(String.Format("{0}\n{1} != {2}", key, x.ToString(), y.ToString()));
-                System.Diagnostics.Debugger.Launch();
-                System.Diagnostics.Debugger.Break();
+                //System.Diagnostics.Debugger.Launch();
+                //System.Diagnostics.Debugger.Break();
 
-                throw new ApplicationException(key);
+                //throw new ApplicationException(key);
             }
         }
     }
