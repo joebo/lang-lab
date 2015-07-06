@@ -10,6 +10,7 @@ namespace App {
     {
         public static void Main(string[] args)
         {
+            //System.Diagnostics.Debugger.Launch();
             if (args.Length > 0)
             {
                 var watch = new Stopwatch();
@@ -56,8 +57,8 @@ namespace JSharp
 
         public A(string word) {
             int val;
-
-            if (word.Contains(" ")) {
+            double vald;
+            if (word.Contains(" ") && !word.Contains(".")) {
                 var longs = new List<long>();
                 foreach (var part in word.Split(' ')) {
                     longs.Add(Int32.Parse(part));
@@ -69,6 +70,18 @@ namespace JSharp
                 Shape = new long[] { Count };
 
             }
+            else if (word.Contains(" ") && word.Contains(".")) {
+                var floats = new List<double>();
+                foreach (var part in word.Split(' ')) {
+                    floats.Add(Double.Parse(part));
+                }
+                Rank = 1;
+                Type = Type.Double;
+                rd = floats.ToArray();
+                Count = floats.Count;
+                Shape = new long[] { Count };
+
+            }
             else if (Int32.TryParse(word, out val)) {
                 Type = Type.Int;
                 ri = new long[1];
@@ -76,6 +89,14 @@ namespace JSharp
                 Count = 1;
                 ri[0] = val;
             }
+            else if (Double.TryParse(word, out vald)) {
+                Type = Type.Double;
+                rd = new double[1];
+                Rank = 0;
+                Count = 1;
+                rd[0] = vald;
+            }
+
             else {
                 new A(Type.Undefined, 0);
             }
@@ -91,6 +112,7 @@ namespace JSharp
             }
             return z;
         }
+
         public override string ToString() {
             if (Type == Type.Undefined) {
                 throw new ArgumentException("Cannot convert undefined to string");
@@ -99,11 +121,15 @@ namespace JSharp
             if (Type == Type.Int && Count == 1) {
                 return ri[0].ToString();
             }
-            var z = new StringBuilder();
-            if (Type == Type.Int && Count > 1) {
+            else if (Type == Type.Double && Count == 1) {
+                return rd[0].ToString();
+            }
+            else if (Count > 1) {
+                var z = new StringBuilder();
                 long[] odometer = new long[Shape.Length];
                 for(var i = 0; i < Count; i++) {
-                    z.Append(ri[i]);
+                    if (Type == Type.Int) { z.Append(ri[i]);}
+                    if (Type == Type.Double) { z.Append(rd[i]);}
                     odometer[Shape.Length-1]++;
 
                     if (odometer[Shape.Length-1] != Shape[Shape.Length-1]) {
@@ -302,7 +328,7 @@ namespace JSharp
             {
                 if (!Char.IsDigit(p) && c == ' ') { emit(); }
                 else if (p == ' ' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
-                else if (Char.IsDigit(p) && c != ' ' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
+                else if (Char.IsDigit(p) && c != ' ' && c!= '.' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
                 else if (c == '(' || c == ')') { emit(); currentWord.Append(c); emit(); }
                 else if (isSymbol(p) && Char.IsLetter(c)) { emit(); currentWord.Append(c); }
                 else if (isSymbol(p) && isSymbol(c)) { emit(); currentWord.Append(c); emit(); }
@@ -469,6 +495,7 @@ namespace JSharp
             tests["parentheses"] = () => equals(toWords("(abc)"), new string[] { "(", "abc", ")" });
             tests["parentheses2"] = () => equals(toWords("((abc))"), new string[] { "(", "(", "abc", ")", ")" });
             tests["numbers"] = () => equals(toWords("1 2 3 4"), new string[] { "1 2 3 4" });
+            tests["floats"] = () => equals(toWords("1.5 2 3 4"), new string[] { "1.5 2 3 4" });
             tests["op with numbers"] = () => equals(toWords("# 1 2 3 4"), new string[] { "#", "1 2 3 4" });
             tests["op with numbers 2"] = () => equals(toWords("1 + 2"), new string[] { "1", "+", "2" });
             tests["op with no spaces"] = () => equals(toWords("1+i. 10"), new string[] { "1", "+", "i.", "10" });
@@ -479,13 +506,13 @@ namespace JSharp
             tests["basic subtract"] = () => equals(parse("5 - 3").ri, new long[] { 2 });
             tests["basic multiply"] = () => equals(parse("5 * 3").ri, new long[] { 15 });
 
-            //tests["basic divide"] = () => equals(parse("15 % 3").ri, new long[] { 5 });
-            tests["basic divide"] = () => equals(parse("1 % 4").rd, new double[] { 0.25 });
+            //tests["basic divide int"] = () => equals(parse("15 % 3").rd, new double[] { 3 });
+            tests["basic divide float"] = () => equals(parse("1 % 4").rd, new double[] { 0.25 });
             tests["iota"] = () => equals(parse("i. 3").ri, new long[] { 0, 1, 2 });
             tests["adds 1 to iota"] = () => equals(parse("1 + i. 3").ri, new long[] { 1, 2, 3 });
             tests["adverb +/ with number list"] = () => equals(parse("+/ 2 2 2").ri, new long[] { 6 });
             tests["adverb +/ verb"] = () => equals(parse("+/ i. 10").ri, new long[] { 45 });
-            //tests["adverb +/"] = () => equals(parse("+/ i. 4").ri,new long[] { 6 });
+
 
             Func<object, object, object[]> pair = (a,w) => new object[] { a,w };
             var eqTests = new Dictionary<string, object[]>();
@@ -496,7 +523,7 @@ namespace JSharp
             eqTests["multi-dimensional add "] = pair(parse("1 + i. 2 2").ToString(),"1 2\n3 4");
             eqTests["multi-dimensional sum"] = pair(parse("+/ i. 2 3").ToString(),"3 5 7");
             eqTests["multi-dimensional sum higher rank"] = pair(parse("+/ i. 2 2 2").ToString(),"4 6\n8 10");
-            eqTests["multi-dimensional sum higher rank"] = pair(parse("+/ i. 4 3 2").ToString(),"36 40\n44 48\n52 56");
+            eqTests["multi-dimensional sum higher rank 2"] = pair(parse("+/ i. 4 3 2").ToString(),"36 40\n44 48\n52 56");
             eqTests["tranpose"] = pair(parse("|: i. 2 3").ToString(),"0 3\n1 4\n2 5");
 
             foreach (var key in tests.Keys) {
@@ -513,7 +540,7 @@ namespace JSharp
                     //System.Diagnostics.Debugger.Launch();
                     //System.Diagnostics.Debugger.Break();
 
-                    //throw new ApplicationException(key);
+                    throw new ApplicationException(key);
                 }
             }
         }
