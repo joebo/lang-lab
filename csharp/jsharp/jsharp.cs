@@ -1,3 +1,5 @@
+//bool support added, but may not be as useful as J
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,7 +12,7 @@ namespace App {
     {
         public static void Main(string[] args)
         {
-            System.Diagnostics.Debugger.Launch();
+            //System.Diagnostics.Debugger.Launch();
             if (args.Length > 0)
             {
                 long kbAtExecution = GC.GetTotalMemory(false) / 1024;
@@ -64,6 +66,7 @@ namespace JSharp
             else if (Type == Type.Double) { rd = new double[n]; }
             else if (Type == Type.Int32) { ri32 = new int[n]; }
             else if (Type == Type.Bool) { rb = new bool[n]; }
+            else if (Type == Type.String) { rs = new string[n]; }
             Rank = rank;
             Shape = shape;
         }
@@ -71,6 +74,13 @@ namespace JSharp
         public A(string word) {
             int val;
             double vald;
+            if (word.StartsWith("'")) {
+                Count = 1; //word.Length - 2;
+                rs = new string[] { word.Substring(1, word.Length-2) };
+                Type = Type.String;
+                Rank = 0;
+                Shape = new long[] { 1 };
+            }
             if (word.Contains(" ") && !word.Contains(".")) {
                 var longs = new List<long>();
                 foreach (var part in word.Split(' ')) {
@@ -157,6 +167,9 @@ namespace JSharp
             else if (Type == Type.Bool && Count == 1) {
                 return (System.Convert.ToInt32(rb[0])).ToString();
             }
+            else if (Type == Type.String && Count == 1) {
+                return rs[0];
+            }
             else if (Count > 1) {
                 var z = new StringBuilder();
                 long[] odometer = new long[Shape.Length];
@@ -164,7 +177,9 @@ namespace JSharp
                     if (Type == Type.Int) { z.Append(ri[i]);}
                     else if (Type == Type.Double) { z.Append(rd[i]);}
                     else if (Type == Type.Int32) { z.Append(ri32[i]);}
+                    else if (Type == Type.String) { z.Append(rs[i]); }
                     else if (Type == Type.Bool) { z.Append(System.Convert.ToInt32(rb[i]));}
+                    
                     odometer[Shape.Length-1]++;
 
                     if (odometer[Shape.Length-1] != Shape[Shape.Length-1]) {
@@ -247,19 +262,45 @@ namespace JSharp
             //for (var i = 0; i < ct; i++) { v.ri32[i] = i; }
             return v;
         }
-
+        public static A shape(A y) {
+            var v = new A(Type.Int, y.Rank, 1, new long[] { y.Rank });
+            v.ri = y.Shape;
+            return v;
+        }
         public static A reshape(A x, A y) {
             var ct = prod(x.ri);
-            var v = new A(y.Type, ct, x.Rank, x.ri);
+            A v = null; 
             long offset = 0;
+
+            char[] chars = null;
+            var ylen = y.Count;
+            if (y.Type == Type.String) {
+                chars = new char[ct];
+                //System.Diagnostics.Debugger.Launch();
+                ylen = y.rs[0].Length;
+            } else {
+                v = new A(y.Type, ct, x.Rank, x.ri);
+
+            }
+            
             for(var i = 0; i < ct; i++ ) {
                 if (y.Type == Type.Int) { v.ri[i] = y.ri[offset]; }
                 else if (y.Type == Type.Double) { v.rd[i] = y.rd[offset]; }
                 else if (y.Type == Type.Int32) { v.ri32[i] = y.ri32[offset]; }
                 else if (y.Type == Type.Bool) { v.rb[i] = y.rb[offset]; }
-
+                else if (y.Type == Type.String) { chars[i] = y.rs[0L][(int)offset]; }
                 offset++;
-                if (offset > y.Count-1) { offset = 0; }
+                if (offset > ylen-1) { offset = 0; }
+            }
+            if (y.Type == Type.String) {
+
+                var size = x.ri[0];
+                var len = x.ri[1];
+                v = new A(y.Type, size, x.Rank, new long[] { size, 1 });
+                for(var i = 0; i < size; i++) {
+                    //intern string saves 4x memory in simple test and 20% slower
+                    v.rs[i] = String.Intern(new String(chars, (int)(i*len), (int)len));
+                }
             }
             return v;
         }
@@ -437,7 +478,7 @@ namespace JSharp
             verbs["%"] = makeVerb(null, Verbs.divide);
             verbs["i."] = makeVerb(Verbs.iota, null);
             verbs["|:"] = makeVerb(Verbs.transpose, null);
-            verbs["$"] = makeVerb(null, Verbs.reshape);
+            verbs["$"] = makeVerb(Verbs.shape, Verbs.reshape);
             
             adverbs["/"] = Adverbs.reduce;
 
@@ -627,7 +668,9 @@ namespace JSharp
             eqTests["reshape double"] = pair(parse("3 $ 3.2").ToString(),"3.2 3.2 3.2");
             eqTests["reshape bool"] = pair(parse("3 $ 0 1").ToString(),"0 1 0");
             eqTests["upcast math that looks bool"] = pair(parse("+/ 1 1 1").ToString(),"3");
-            
+            eqTests["reshape int matrix"] = pair(parse("3 2 $ i. 3").ToString(),"0 1\n2 0\n1 2");
+            eqTests["reshape string"] = pair(parse("3 2 $ 'abc'").ToString(),"ab\nca\nbc");
+            //eqTests["reshape string multi"] = pair(parse("3 2 $ 3").ToString(),"3 3 3");
             
             foreach (var key in tests.Keys) {
                 if (!tests[key]()) {
