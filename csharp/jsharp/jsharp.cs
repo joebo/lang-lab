@@ -29,7 +29,7 @@ namespace App {
                 Console.WriteLine(kbAfter2 + " Amt. After Collection");
                 Console.WriteLine(kbAfter2 - kbAfter1 + " Amt. Collected by GC.");       
             }
-            //new Tests().TestAll();
+            new Tests().TestAll();
         }
     }
 }
@@ -354,14 +354,19 @@ namespace JSharp
             var emit = new Action(() => { if (currentWord.Length > 0) { z.Add(currentWord.ToString().Trim()); } currentWord = new StringBuilder(); });
             char p = '\0';
             Func<char, bool> isSymbol = (c) => c == '+' || c == '/';
+
+            bool inQuote = false;
+
             foreach (var c in w)
             {
-                if (!Char.IsDigit(p) && c == ' ') { emit(); }
-                else if (p == ' ' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
-                else if (Char.IsDigit(p) && c != ' ' && c!= '.' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
-                else if (c == '(' || c == ')') { emit(); currentWord.Append(c); emit(); }
-                else if (isSymbol(p) && Char.IsLetter(c)) { emit(); currentWord.Append(c); }
-                else if (isSymbol(p) && isSymbol(c)) { emit(); currentWord.Append(c); emit(); }
+                if (c == '\'' && !inQuote) {  emit(); currentWord.Append(c); inQuote=true; }
+                else if (c == '\'' && inQuote) { currentWord.Append(c); emit();  inQuote = !inQuote; }
+                else if (!inQuote && !Char.IsDigit(p) && c == ' ') { emit(); }
+                else if (!inQuote && p == ' ' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
+                else if (!inQuote && Char.IsDigit(p) && c != ' ' && c!= '.' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
+                else if (!inQuote && c == '(' || c == ')') { emit(); currentWord.Append(c); emit(); }
+                else if (!inQuote && isSymbol(p) && Char.IsLetter(c)) { emit(); currentWord.Append(c); }
+                else if (!inQuote && isSymbol(p) && isSymbol(c)) { emit(); currentWord.Append(c); emit(); }
                 else currentWord.Append(c);
                 p = c;
             }
@@ -522,6 +527,11 @@ namespace JSharp
                 
             tests["returns itself"] = () => equals(toWords("abc"), "abc");
             tests["parses spaces"] = () => equals(toWords("+ -"), new string[] { "+", "-" });
+            tests["parses strings"] = () => equals(toWords("1 'hello world' 2"), new string[] { "1", "'hello world'", "2" });
+            tests["parses strings with number"] = () => equals(toWords("1 'hello 2 world' 2"), new string[] { "1", "'hello 2 world'", "2" });
+
+            //todo failing
+            //tests["parses strings with embedded quote"] = () => equals(toWords("'hello ''this'' world'"), new string[] { "'hello 'this' world'" });
             tests["parentheses"] = () => equals(toWords("(abc)"), new string[] { "(", "abc", ")" });
             tests["parentheses2"] = () => equals(toWords("((abc))"), new string[] { "(", "(", "abc", ")", ")" });
             tests["numbers"] = () => equals(toWords("1 2 3 4"), new string[] { "1 2 3 4" });
