@@ -9,7 +9,7 @@ public class Program
 {
     public static void Main(string[] args)
     {
-
+        //System.Diagnostics.Debugger.Launch();
         new JSharp().tests();
         if (args.Length > 0)
         {
@@ -34,14 +34,12 @@ public class JSharp
 {
     public enum Type { Undefined, Int, String, Double, Verb };
 
-    public class Verb
-    {
+    public class Verb {
         public Func<A, A> monad;
         public Func<A, A, A> dyad;
         public Func<Func<A, A, A>, A, A> adverb;
     }
-    public class A
-    {
+    public class A {
 
         public Type Type;
         public long Count;
@@ -52,38 +50,39 @@ public class JSharp
         public double[] rd;
         public Verb Verb;
 
-        public A(Type type, long n)
-        {
+        public A(Type type, long n, int rank=0,long[] shape=null) {
             Type = type;
             Count = n;
+            if (n > 1 && rank == 0) { rank = 1; shape = new long[n]; }
             if (Type == Type.Int) { ri = new long[n]; }
             if (Type == Type.Double) { rd = new double[n]; }
+            Rank = rank;
+            Shape = shape;
         }
 
-        public A(string word)
-        {
+        public A(string word) {
             int val;
 
-            if (word.Contains(" "))
-            {
+            if (word.Contains(" ")) {
                 var longs = new List<long>();
-                foreach (var part in word.Split(' '))
-                {
+                foreach (var part in word.Split(' ')) {
                     longs.Add(Int32.Parse(part));
                 }
+                Rank = 1;
                 Type = Type.Int;
                 ri = longs.ToArray();
                 Count = longs.Count;
+                Shape = new long[] { Count };
+
             }
-            else if (Int32.TryParse(word, out val))
-            {
+            else if (Int32.TryParse(word, out val)) {
                 Type = Type.Int;
                 ri = new long[1];
+                Rank = 1;
                 Count = 1;
                 ri[0] = val;
             }
-            else
-            {
+            else {
                 new A(Type.Undefined, 0);
             }
         }
@@ -98,41 +97,62 @@ public class JSharp
             }
             return z;
         }
-        public override string ToString()
-        {
-            if (Type == Type.Int && Count > 0)
-            {
+        public override string ToString() {
+            if (Type == Type.Undefined) {
+                throw new ArgumentException("Cannot convert undefined to string");
+            }
+
+            if (Type == Type.Int && Count == 1) {
                 return ri[0].ToString();
+            }
+            var z = new StringBuilder();
+            if (Type == Type.Int && Count > 1) {
+                long[] odometer = new long[Shape.Length];
+                for(var i = 0; i < Count; i++) {
+                    z.Append(ri[i]);
+                    odometer[Shape.Length-1]++;
+
+                    if (odometer[Shape.Length-1] != Shape[Shape.Length-1]) {
+                        z.Append(" ");
+                    }
+                    
+                    for(var k = Shape.Length-1;k>0;k--) {
+                        if (odometer[k] == Shape[k]) {
+                            odometer[k] = 0;
+                            z.Append("\n");
+                            odometer[k-1]++;
+                        }
+                    }
+                }
+                var ret = z.ToString();
+                ret = ret.Substring(0, ret.Length - (Shape.Length-1));
+                return ret;
             }
             return "";
         }
 
-        public A(Type type, long n, double y) : this(type, n)
-        {
+        public A(Type type, long n, double y) : this(type, n) {
             rd[0] = y;
         }
-        public long AsInt(int i)
-        {
+
+        public long AsInt(int i) {
             if (Type == Type.Int) { return ri[i]; }
             if (Type == Type.Double) { return (int)rd[i]; }
             return 0;
         }
-        public double AsDouble(int i)
-        {
+        public double AsDouble(int i) {
             if (Type == Type.Double) { return rd[i]; }
             if (Type == Type.Int) { return (double)ri[i]; }
             return 0;
         }
-        public void SetInt(int i, long val)
-        {
+        
+        public void SetInt(int i, long val) {
             ri[i] = val;
         }
-        public void SetDouble(int i, double val)
-        {
+        public void SetDouble(int i, double val) {
             rd[i] = val;
         }
-        public A Copy(long i)
-        {
+        public A Copy(long i) {
             A v = new A(Type, 1);
             if (Type == Type.Double) { v.rd[0] = rd[i]; }
             if (Type == Type.Int) { v.ri[0] = ri[i]; }
@@ -140,43 +160,34 @@ public class JSharp
         }
     }
 
-    A makeVerb(Func<A, A> monad, Func<A, A, A> dyad)
-    {
+    A makeVerb(Func<A, A> monad, Func<A, A, A> dyad) {
         A z = new A(Type.Verb, 0);
         z.Verb = new Verb { monad = monad, dyad = dyad };
         return z;
     }
 
-    A iota(A y)
-    {
-        var v = new A(Type.Int, y.ri[0]);
-        for (var i = 0; i < y.ri[0]; i++) { v.ri[i] = i; }
+    A iota(A y) {
+        //System.Diagnostics.Debugger.Launch();
+        //System.Diagnostics.Debugger.Break();
+        var ct = y.ri.Aggregate(1L, (prod, next)=> prod*next);
+        var v = new A(Type.Int, ct, (int)y.ri[0], y.ri);
+        for (var i = 0; i < ct; i++) { v.ri[i] = i; }
         return v;
     }
 
     
-    double addd(double a, double b) { return a+b; }
-    long addi(long a, long b) { return a+b; }
-    double subd(double a, double b) { return a-b; }
-    long subi(long a, long b) { return a-b; }
-    double divided(double a, double b) { return a/b; }
-    long dividei(long a, long b) { return a/b; }
- 
-    A add(A x, A y) {
-        return math(x,y,addi,addd);
-    }
-    A subtract(A x, A y) {
-        return math(x,y,subi,subd);
-    }
+   
+    A add(A x, A y) { return math(x,y,(a,w)=>(a+w),(a,w)=>(a+w));  }
+    A subtract(A x, A y) { return math(x,y,(a,w)=>(a-w),(a,w)=>(a-w)); }
+    A multiply(A x, A y) { return math(x,y,(a,w)=>(a*w),(a,w)=>(a*w)); }
     A divide(A x, A y) {
         if (y.Type == Type.Int) {
             y = y.Convert(Type.Double);
         }
-        return math(x,y,dividei,divided);
+        return math(x,y,null,(a,w)=>(a/w));
     }
     
-    A math(A x, A y, Func<long, long, long> intop, Func<double, double, double> doubleop)
-    {
+    A math(A x, A y, Func<long, long, long> intop, Func<double, double, double> doubleop) {
         Type type = Type.Undefined;
         if (y.Type == x.Type) { type = y.Type; }
         if (y.Type == Type.Double || x.Type == Type.Double) { type = Type.Double; }
@@ -197,48 +208,22 @@ public class JSharp
         return v;
     }
 
-    A multiply(A x, A y)
-    {
-        Type type = Type.Undefined;
-        if (y.Type == x.Type) { type = y.Type; }
-        if (y.Type == Type.Double || x.Type == Type.Double) { type = Type.Double; }
-
-        var v = new A(type, y.Count);
-        if (type == Type.Int)
-        {
-            for (var i = 0; i < y.Count; i++) v.SetInt(i, x.AsInt(i * (x.Count == y.Count ? 1 : 0)) * y.AsInt(i));
-        }
-        else if (type == Type.Double)
-        {
-            for (var i = 0; i < y.Count; i++) v.SetDouble(i, x.AsDouble(i * (x.Count == y.Count ? 1 : 0)) * y.AsDouble(i));
-        }
-        else
-        {
-            throw new ArgumentException("argument mismatch");
-        }
-        return v;
-    }
-
-
-    A reduce(Func<A, A, A> op, A y)
-    {
+    //todo special code for +/
+    A reduce(Func<A, A, A> op, A y) {
         var v = new A(y.Type, 1);
-        for (var i = 0; i < y.Count; i++)
-        {
-            v = op(v, y.Copy(i));
+        for (var i = 0; i < y.Count; i++) {
+            v = op(v, y.Copy(i)); //copy the ith item for procesing
         }
         return v;
     }
 
-    A call1(A verb, A y)
-    {
+    A call1(A verb, A y) {
         if (verb.Verb.adverb != null) return verb.Verb.adverb(verb.Verb.dyad, y);
         else return verb.Verb.monad(y);
     }
     A call2(A verb, A x, A y) { return verb.Verb.dyad(x, y); }
 
-    A sum(A y)
-    {
+    A sum(A y) {
         var v = new A(y.Type, 1);
         for (var i = 0; i < y.Count; i++)
         {
@@ -248,14 +233,12 @@ public class JSharp
         return v;
     }
 
-    public struct Token
-    {
+    public struct Token {
         public string word;
         public A val;
     }
 
-    public string[] toWords(string w)
-    {
+    public string[] toWords(string w) {
         var z = new List<string>();
         var currentWord = new StringBuilder();
 
@@ -278,21 +261,18 @@ public class JSharp
         return z.ToArray();
     }
 
-    bool equals(string[] a1, params string[] a2)
-    {
+    bool equals(string[] a1, params string[] a2) {
         return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
     }
-    bool equals(long[] a1, params long[] a2)
-    {
+    
+    bool equals(long[] a1, params long[] a2) {
         return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
     }
-    bool equals(double[] a1, params double[] a2)
-    {
+    bool equals(double[] a1, params double[] a2) {
         return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
     }
 
-    public A parse(string cmd)
-    {
+    public A parse(string cmd) {
         var adverbs = new Dictionary<string, Func<Func<A, A, A>, A, A>>();
         var verbs = new Dictionary<string, A>();
 
@@ -321,14 +301,12 @@ public class JSharp
 
         var stack = new Stack<Token>();
         var queue = new Queue<Token>();
-        for (var k = words.Length - 1; k >= 0; k--)
-        {
+        for (var k = words.Length - 1; k >= 0; k--) {
             queue.Enqueue(new Token { word = words[k] });
         }
         int i = 0;
         //just a safety check for now
-        while (i < 100)
-        {
+        while (i < 100) {
             var sarr = stack.ToArray().ToList();
             var w1 = sarr.Count > 0 ? sarr[0] : new Token { word = "" };
             var w2 = sarr.Count > 1 ? sarr[1] : new Token { word = "" };
@@ -343,11 +321,9 @@ public class JSharp
             else if (isEdgeOrNotConj(w1) && (isNoun(w2) || isVerb(w2)) && isAdverb(w3) && true) { step = 3; } //adverb
             else if (w1.word == "(" && isNoun(w2) && w3.word == ")" && true) { step = 8; }
 
-            if (step >= 0)
-            {
+            if (step >= 0) {
                 //Console.WriteLine("STEP: " + step);
-                if (step == 0)
-                { //monad
+                if (step == 0) { //monad
                     var p1 = stack.Pop();
                     var op = stack.Pop();
                     var xt = stack.Pop();
@@ -358,8 +334,7 @@ public class JSharp
                     //Console.WriteLine("A STACK: " + String.Join("",stack.ToArray()));
                     //stack.Push(top);
                 }
-                else if (step == 1)
-                {   //monad                         
+                else if (step == 1) {   //monad                         
                     var p1 = stack.Pop();
                     var p2 = stack.Pop();
                     var op = stack.Pop();
@@ -371,8 +346,7 @@ public class JSharp
                     stack.Push(p1);
                     
                 }
-                else if (step == 2)
-                { //dyad
+                else if (step == 2) { //dyad
                     //Console.WriteLine("STACK B: " + String.Join("",stack.ToArray()));                                 
                     var p1 = stack.Pop();
                     var xt = stack.Pop();
@@ -386,8 +360,7 @@ public class JSharp
                     stack.Push(p1);
                     //Console.WriteLine("STACK A: " + String.Join("",stack.ToArray()));
                 }
-                else if (step == 3)
-                { //adverb
+                else if (step == 3) { //adverb
                     //todo: adverb should not evaluate, but add a new verb to stack
                     //stack.Dump();
                     var p1 = stack.Pop();
@@ -402,18 +375,15 @@ public class JSharp
                     stack.Push(new Token { val = z });
                     stack.Push(p1);
                 }
-                else if (step == 8)
-                {
+                else if (step == 8) {
                     var lpar = stack.Pop();
                     var x = stack.Pop();
                     var rpar = stack.Pop();
                     stack.Push(x);
                 }
             }
-            else
-            {
-                if (queue.Count() != 0)
-                {
+            else {
+                if (queue.Count() != 0) {
                     var newWord = queue.Dequeue();
                     var val = new A(newWord.word);
                     var token = new Token();
@@ -461,14 +431,29 @@ public class JSharp
         tests["basic divide"] = () => equals(parse("1 % 4").rd, new double[] { 0.25 });
         tests["iota"] = () => equals(parse("i. 3").ri, new long[] { 0, 1, 2 });
         tests["adds 1 to iota"] = () => equals(parse("1 + i. 3").ri, new long[] { 1, 2, 3 });
-        tests["adverb +/"] = () => equals(parse("+/ 2 2 2").ri, new long[] { 6 });
-        tests["adverb +/"] = () => equals(parse("+/ i. 10").ri, new long[] { 45 });
+        tests["adverb +/ with number list"] = () => equals(parse("+/ 2 2 2").ri, new long[] { 6 });
+        tests["adverb +/ verb"] = () => equals(parse("+/ i. 10").ri, new long[] { 45 });
         //tests["adverb +/"] = () => equals(parse("+/ i. 4").ri,new long[] { 6 });
 
-        foreach (var key in tests.Keys)
-        {
-            if (!tests[key]())
-            {
+        foreach (var key in tests.Keys) {
+            if (!tests[key]()) {
+                throw new ApplicationException(key);
+            }
+        }
+        Func<object, object, object[]> pair = (a,w) => new object[] { a,w };
+        var eqTests = new Dictionary<string, object[]>();
+        eqTests["string rep number"] = pair(new A("1").ToString(),"1");
+        eqTests["string rep number list"] = pair(new A("1 2 3").ToString(),"1 2 3");
+        eqTests["multi-dimensional"] = pair(parse("i. 2 3").ToString(),"0 1 2\n3 4 5");
+        eqTests["multi-dimensional 2"] = pair(parse("i. 2 2 2").ToString(),"0 1\n2 3\n\n4 5\n6 7");
+        foreach (var key in eqTests.Keys) {
+            var x=eqTests[key][0];
+            var y=eqTests[key][1];
+            if (x.ToString() != y.ToString()) {
+                Console.WriteLine(String.Format("{0}\n{1} != {2}", key, x.ToString(), y.ToString()));
+                System.Diagnostics.Debugger.Launch();
+                System.Diagnostics.Debugger.Break();
+
                 throw new ApplicationException(key);
             }
         }
