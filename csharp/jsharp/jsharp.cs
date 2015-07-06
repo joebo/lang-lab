@@ -13,21 +13,30 @@ namespace App {
             //System.Diagnostics.Debugger.Launch();
             if (args.Length > 0)
             {
+                long kbAtExecution = GC.GetTotalMemory(false) / 1024;
                 var watch = new Stopwatch();
                 watch.Start();
                 var ret = new Parser().parse(args[0]);
                 watch.Stop();
-                Console.WriteLine(ret.ToString());
+                Console.WriteLine("Output: " + ret.ToString());
                 Console.WriteLine(String.Format("Took: {0} ms", watch.ElapsedMilliseconds));
+                long kbAfter1 = GC.GetTotalMemory(false) / 1024;
+                long kbAfter2 = GC.GetTotalMemory(true) / 1024;
+
+                Console.WriteLine(kbAtExecution + " Started with this kb.");
+                Console.WriteLine(kbAfter1 + " After the test.");
+                Console.WriteLine(kbAfter1 - kbAtExecution + " Amt. Added.");
+                Console.WriteLine(kbAfter2 + " Amt. After Collection");
+                Console.WriteLine(kbAfter2 - kbAfter1 + " Amt. Collected by GC.");       
             }
-            new Tests().TestAll();
+            //new Tests().TestAll();
         }
     }
 }
 
 namespace JSharp
 {
-    public enum Type { Undefined, Int, String, Double, Verb };
+    public enum Type { Undefined, Int, String, Double, Verb, Int32 };
 
     public class Verb {
         public Func<A, A> monad;
@@ -41,6 +50,7 @@ namespace JSharp
         public int Rank;
         public long[] Shape;
         public long[] ri;
+        public int[] ri32;
         public string[] rs;
         public double[] rd;
         public Verb Verb;
@@ -50,7 +60,8 @@ namespace JSharp
             Count = n;
             if (n > 1 && rank == 0) { rank = 1; shape = new long[1]; shape[0] = n; }
             if (Type == Type.Int) { ri = new long[n]; }
-            if (Type == Type.Double) { rd = new double[n]; }
+            else if (Type == Type.Double) { rd = new double[n]; }
+            else if (Type == Type.Int32) { ri32 = new int[n]; }
             Rank = rank;
             Shape = shape;
         }
@@ -124,12 +135,16 @@ namespace JSharp
             else if (Type == Type.Double && Count == 1) {
                 return rd[0].ToString();
             }
+            else if (Type == Type.Int32 && Count == 1) {
+                return ri32[0].ToString();
+            }
             else if (Count > 1) {
                 var z = new StringBuilder();
                 long[] odometer = new long[Shape.Length];
                 for(var i = 0; i < Count; i++) {
                     if (Type == Type.Int) { z.Append(ri[i]);}
-                    if (Type == Type.Double) { z.Append(rd[i]);}
+                    else if (Type == Type.Double) { z.Append(rd[i]);}
+                    else if (Type == Type.Int32) { z.Append(ri32[i]);}
                     odometer[Shape.Length-1]++;
 
                     if (odometer[Shape.Length-1] != Shape[Shape.Length-1]) {
@@ -177,7 +192,8 @@ namespace JSharp
             A v = null; 
             v = new A(Type, 1);
             if (Type == Type.Double) { v.rd[0] = rd[i]; }
-            if (Type == Type.Int) { v.ri[0] = ri[i]; }
+            else if (Type == Type.Int) { v.ri[0] = ri[i]; }
+            else if (Type == Type.Int32) { v.ri32[0] = ri32[i]; }
             return v;
         }
 
@@ -196,8 +212,13 @@ namespace JSharp
     public static class Verbs {
         public static A iota(A y) {
             var ct = y.ri.Aggregate(1L, (prod, next)=> prod*next);
+
             var v = new A(Type.Int, ct, y.ri.Length, y.ri.Length == 1 ? new long[] { y.ri[0] } : y.ri);
             for (var i = 0; i < ct; i++) { v.ri[i] = i; }
+
+            //use int32 for iota
+            //var v = new A(Type.Int32, ct, y.ri.Length, y.ri.Length == 1 ? new long[] { y.ri[0] } : y.ri);
+            //for (var i = 0; i < ct; i++) { v.ri32[i] = i; }
             return v;
         }
 
@@ -232,7 +253,9 @@ namespace JSharp
 
             return v;
         }
-        public static A add(A x, A y) { return math(x,y,(a,w)=>(a+w),(a,w)=>(a+w));  }
+        public static A add(A x, A y) {
+            return math(x,y,(a,w)=>(a+w),(a,w)=>(a+w));
+        }
         public static A subtract(A x, A y) { return math(x,y,(a,w)=>(a-w),(a,w)=>(a-w)); }
         public static A multiply(A x, A y) { return math(x,y,(a,w)=>(a*w),(a,w)=>(a*w)); }
         public static A divide(A x, A y) {
@@ -243,13 +266,20 @@ namespace JSharp
         }
     
         public static A math(A x, A y, Func<long, long, long> intop, Func<double, double, double> doubleop) {
+
             Type type = Type.Undefined;
             if (y.Type == x.Type) { type = y.Type; }
-            if (y.Type == Type.Double || x.Type == Type.Double) { type = Type.Double; }
+            else if (y.Type == Type.Double || x.Type == Type.Double) { type = Type.Double; }
+
+            if (y.Type == Type.Int32) { type = Type.Int; }
 
             var v = new A(type, y.Count, y.Rank, y.Shape);
             var offsetX =  (x.Count == y.Count ? 1 : 0);
-            if (type == Type.Int)
+            if (y.Type == Type.Int32)
+            {
+                for (var i = 0; i < y.Count; i++) { v.ri[i] = x.ri == null ? x.ri32[i*offsetX] : x.ri[i*offsetX] +  y.ri32[i]; }
+            }
+            else if (type == Type.Int)
             {
                 for (var i = 0; i < y.Count; i++) v.SetInt(i, intop(x.AsInt(i * offsetX),y.AsInt(i)));
             }
