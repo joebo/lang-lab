@@ -11,7 +11,7 @@ namespace App {
         public static void Main(string[] args)
         {
             //System.Diagnostics.Debugger.Launch();
-            if (args.Length > 0)
+            if (args.Length > 0 && args[0] != "-t")
             {
                 long kbAtExecution = GC.GetTotalMemory(false) / 1024;
                 var watch = new Stopwatch();
@@ -28,8 +28,17 @@ namespace App {
                 Console.WriteLine(kbAfter1 - kbAtExecution + " Amt. Added.");
                 Console.WriteLine(kbAfter2 + " Amt. After Collection");
                 Console.WriteLine(kbAfter2 - kbAfter1 + " Amt. Collected by GC.");       
+            } else if (args.Length > 0 && args[0] == "-t") {
+                new Tests().TestAll();
             }
-            new Tests().TestAll();
+            else {
+                string line = "";
+                while((line = Console.ReadLine()) != "exit") {
+                    var ret = new Parser().parse(line);
+                    Console.WriteLine(ret.ToString());
+                }
+            }
+            
         }
     }
 }
@@ -163,7 +172,7 @@ namespace JSharp
                 var newShape = y.Shape.Skip(1).ToArray();
                 var ct = prod(newShape);
                 
-                var v = new A<T>(ct);
+                var v = new A<T>(ct, newShape);
                 for(var i = 0; i < ct; i++) {
                     for(var k = 0; k < y.Shape[0];k++) {
                         var n = i+(k*ct);
@@ -211,14 +220,14 @@ namespace JSharp
         }
         
         public static A<long> addi(A<long> x, A<long> y) { 
-            var z = new A<long>(y.Ravel.Length);
+            var z = new A<long>(y.Ravel.Length, y.Shape);
             for(var i = 0; i < y.Ravel.Length; i++) {                   
                 z.Ravel[i] = x.Ravel[0] + y.Ravel[i];
             }
             return z;
         }
         public static A<double> addd<T,T2>(A<T> x, A<T2> y)  where T : struct where T2 : struct { 
-            var z = new A<double>(y.Ravel.Length);
+            var z = new A<double>(y.Ravel.Length, y.Shape);
             for(var i = 0; i < y.Ravel.Length; i++) {                   
                 z.Set(i, Convert.ToDouble(Add(x.Ravel[0], y.Ravel[i])));
             }
@@ -481,6 +490,13 @@ namespace JSharp
             eqTests["reshape string"] = pair(parse("3 2 $ 'abc'").ToString(),"ab\nca\nbc");
             eqTests["adverb simple"] = pair(parse("+/ i. 4").ToString(), "6");
             eqTests["multi-dimensional sum"] = pair(parse("+/ i. 2 3").ToString(),"3 5 7");
+            eqTests["multi-dimensional"] = pair(parse("i. 2 3").ToString(),"0 1 2\n3 4 5");
+            eqTests["multi-dimensional 2"] = pair(parse("i. 2 2 2").ToString(),"0 1\n2 3\n\n4 5\n6 7");
+            eqTests["multi-dimensional add "] = pair(parse("1 + i. 2 2").ToString(),"1 2\n3 4");
+            eqTests["multi-dimensional sum"] = pair(parse("+/ i. 2 3").ToString(),"3 5 7");
+            eqTests["multi-dimensional sum higher rank"] = pair(parse("+/ i. 2 2 2").ToString(),"4 6\n8 10");
+            eqTests["multi-dimensional sum higher rank 2"] = pair(parse("+/ i. 4 3 2").ToString(),"36 40\n44 48\n52 56");
+
             foreach (var key in eqTests.Keys) {
                 var x=eqTests[key][0];
                 var y=eqTests[key][1];
