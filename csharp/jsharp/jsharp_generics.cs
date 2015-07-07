@@ -591,7 +591,15 @@ namespace JSharp
                 var z =  parser.parse("1 plus 2").ToString();
                 return z == "3";
             };
-            
+
+            tests["double verb assignment"] =() => {
+                var parser = new Parser();
+                parser.parse("plus=: +");
+                parser.parse("plusx=: plus");
+                var z =  parser.parse("1 plusx 2").ToString();
+                return z == "3";
+            };
+
             foreach (var key in tests.Keys) {
                 if (!tests[key]()) {
                     //throw new ApplicationException(key);
