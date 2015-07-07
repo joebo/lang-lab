@@ -1,5 +1,3 @@
-//bool support added, but may not be as useful as J
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -254,7 +252,7 @@ namespace JSharp
             
             char[] chars = new char[ct];
             ylen = y.Ravel[0].str.Length;
-                        
+            
             for(var i = 0; i < ct; i++ ) {
                 chars[i] = y.Ravel[0].str[(int)offset];
                 offset++;
