@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Diagnostics;
 
+
 namespace App {
     using JSharp;
     public class Program
@@ -159,6 +160,16 @@ namespace JSharp
             return ri.Aggregate(1L, (prod, next)=> prod*next);
         }
 
+        public static A<long> reduceplus(A<long> y) {
+            var v = new A<long>(1);
+            long total = 0;
+            for (var i = 0; i < y.Count; i++) {
+                total+= (long)y.Ravel[i];
+            }
+            v.Ravel[0] = total;
+            return v;
+        }
+        
         public static A<T> reduce<T>(AType op, A<T> y) where T : struct {
             if (y.Rank == 1) {
                 var v = new A<T>(1);
@@ -193,8 +204,15 @@ namespace JSharp
         }
 
         public static AType Call1(AType verb, AType y)  {
-            if (y.GetType() == typeof(A<long>)) {
-                return reduce<long>(verb, (A<long>)y);
+            var adverb = ((A<Verb>)verb).Ravel[0].adverb;
+            var op = ((A<Verb>)verb).Ravel[0].op;
+            if (adverb == "/" && op == "+" && y.Rank == 1 && y.GetType() == typeof(A<long>)) {
+                return reduceplus((A<long>)y);
+            }
+            else if (adverb == "/") {
+                if (y.GetType() == typeof(A<long>)) {
+                    return reduce<long>(verb, (A<long>)y);
+                }
             }
             throw new NotImplementedException();
         }
@@ -336,21 +354,25 @@ namespace JSharp
             //using trim is a hack
             var emit = new Action(() => { if (currentWord.Length > 0) { z.Add(currentWord.ToString().Trim()); } currentWord = new StringBuilder(); });
             char p = '\0';
-            Func<char, bool> isSymbol = (c) => c == '+' || c == '/';
+            Func<char, bool> isSymbol = (c) => Verbs.Words.Where(x=>x!="i.").Where(x=>x.Contains(c)).Count() > 0 || Adverbs.Words.Where(x=>x.Contains(c)).Count() > 0;
 
             bool inQuote = false;
 
             foreach (var c in w)
             {
-                if (c == '\'' && !inQuote) {  emit(); currentWord.Append(c); inQuote=true; }
-                else if (c == '\'' && inQuote) { currentWord.Append(c); emit();  inQuote = !inQuote; }
-                else if (!inQuote && !Char.IsDigit(p) && c == ' ') { emit(); }
-                else if (!inQuote && p == ' ' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
-                else if (!inQuote && Char.IsDigit(p) && c != ' ' && c!= '.' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
-                else if (!inQuote && c == '(' || c == ')') { emit(); currentWord.Append(c); emit(); }
-                else if (!inQuote && isSymbol(p) && Char.IsLetter(c)) { emit(); currentWord.Append(c); }
-                else if (!inQuote && isSymbol(p) && isSymbol(c)) { emit(); currentWord.Append(c); emit(); }
-                else currentWord.Append(c);
+                if (!inQuote && c == '\'') {  emit(); currentWord.Append(c); inQuote=true; }
+                else if (inQuote && c == '\'') { currentWord.Append(c); emit();  inQuote = !inQuote; }
+                else if (inQuote) { currentWord.Append(c); }
+                else {
+                    if (!Char.IsDigit(p) && c == ' ') { emit(); }
+                    else if (p == ' ' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
+                    else if (Char.IsDigit(p) && c != ' ' && c!= '.' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
+                    else if (c == '(' || c == ')') { emit(); currentWord.Append(c); emit(); }
+                    else if (isSymbol(p) && Char.IsLetter(c)) { emit(); currentWord.Append(c); }
+                    else if (isSymbol(p) && isSymbol(c)) { emit(); currentWord.Append(c); emit(); }
+                    else if (isSymbol(p) && Char.IsDigit(c)) { emit(); currentWord.Append(c); } //1+2
+                    else currentWord.Append(c);
+                }
                 p = c;
             }
             emit();
@@ -476,12 +498,54 @@ namespace JSharp
         }
     }
     public class Tests {
+        bool equals(string[] a1, params string[] a2) {
+            return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
+        }
+    
+        bool equals(long[] a1, params long[] a2) {
+            return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
+        }
+        bool equals(double[] a1, params double[] a2) {
+            return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
+        }
+        bool equals(bool[] a1, params bool[] a2) {
+            return a1.OrderBy(a => a).SequenceEqual(a2.OrderBy(a => a));
+        }
 
         public void TestAll() {
             var j = new Parser();
 
             Func<string, AType> parse = (cmd) => j.parse(cmd);
             Func<object, object, object[]> pair = (a,w) => new object[] { a,w };
+
+            var tests = new Dictionary<string, Func<bool>>();
+
+            Func<string, string[]> toWords = (w) => j.toWords(w);
+                
+            tests["returns itself"] = () => equals(toWords("abc"), "abc");
+            tests["parses spaces"] = () => equals(toWords("+ -"), new string[] { "+", "-" });
+            tests["parses strings"] = () => equals(toWords("1 'hello world' 2"), new string[] { "1", "'hello world'", "2" });
+            tests["parses strings with number"] = () => equals(toWords("1 'hello 2 world' 2"), new string[] { "1", "'hello 2 world'", "2" });
+
+            //todo failing
+            //tests["parses strings with embedded quote"] = () => equals(toWords("'hello ''this'' world'"), new string[] { "'hello 'this' world'" });
+            tests["parentheses"] = () => equals(toWords("(abc)"), new string[] { "(", "abc", ")" });
+            tests["parentheses2"] = () => equals(toWords("((abc))"), new string[] { "(", "(", "abc", ")", ")" });
+            tests["numbers"] = () => equals(toWords("1 2 3 4"), new string[] { "1 2 3 4" });
+            tests["floats"] = () => equals(toWords("1.5 2 3 4"), new string[] { "1.5 2 3 4" });
+            tests["op with numbers"] = () => equals(toWords("# 1 2 3 4"), new string[] { "#", "1 2 3 4" });
+            tests["op with numbers 2"] = () => equals(toWords("1 + 2"), new string[] { "1", "+", "2" });
+            tests["op with no spaces"] = () => equals(toWords("1+i. 10"), new string[] { "1", "+", "i.", "10" });
+            tests["adverb +/"] = () => equals(toWords("+/ 1 2 3"), new string[] { "+", "/", "1 2 3" });
+            tests["no spaces 1+2"] = () => equals(toWords("1+2"), new string[] { "1", "+", "2" });
+
+            foreach (var key in tests.Keys) {
+                if (!tests[key]()) {
+                    //throw new ApplicationException(key);
+                    Console.WriteLine("TEST " + key + " failed");
+                }
+            }
+
             var eqTests = new Dictionary<string, object[]>();
             eqTests["iota simple"] = pair(parse("i. 3").ToString(), "0 1 2");
             eqTests["shape iota simple"] = pair(parse("$ i. 3").ToString(), "3");
