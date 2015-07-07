@@ -11,7 +11,9 @@ namespace App {
     {
         public static void Main(string[] args)
         {
-            //System.Diagnostics.Debugger.Launch();
+            if (args.Length == 2 && args[1] == "-d") {
+                System.Diagnostics.Debugger.Launch();                
+            }
             if (args.Length > 0 && args[0] != "-t")
             {
                 long kbAtExecution = GC.GetTotalMemory(false) / 1024;
@@ -52,7 +54,7 @@ namespace JSharp
         public int Rank { get { return Shape.Length; } }
 
 
-        public static AType MakeA(string word)  {
+        public static AType MakeA(string word, Parser environment)  {
             int val;
             double vald;
             if (word.StartsWith("'")) {
@@ -160,6 +162,7 @@ namespace JSharp
             return ri.Aggregate(1L, (prod, next)=> prod*next);
         }
 
+        //special code for +/ rank 1
         public static A<long> reduceplus(A<long> y) {
             var v = new A<long>(1);
             long total = 0;
@@ -194,7 +197,7 @@ namespace JSharp
                         var vi = new A<T>(1);
                         vi.Ravel[0] = v.Ravel[i];
 
-                        v.Ravel[i] = ((A<T>)Verbs.Call2(op, vi, yi)).Ravel[0]; //copy the ith item for procesing
+                        v.Ravel[i] = ((A<T>)Verbs.Call2(op, vi, yi)).Ravel[0]; 
                     }
                 }
                 return v;
@@ -220,7 +223,7 @@ namespace JSharp
     
     public class Verbs {
 
-        public static string[] Words = new string[] { "+", "i.", "$" };
+        public static string[] Words = new string[] { "+", "i.", "$", "=" };
         
         public static A<long> iota<T>(A<T> y) where T : struct  {
             var shape = y.Ravel.Cast<long>().ToArray();
@@ -346,7 +349,7 @@ namespace JSharp
     }
 
 
-    class Parser {
+    public class Parser {
         public string[] toWords(string w) {
             var z = new List<string>();
             var currentWord = new StringBuilder();
@@ -368,9 +371,11 @@ namespace JSharp
                     else if (p == ' ' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
                     else if (Char.IsDigit(p) && c != ' ' && c!= '.' && !Char.IsDigit(c)) { emit(); currentWord.Append(c); }
                     else if (c == '(' || c == ')') { emit(); currentWord.Append(c); emit(); }
+                    else if ((c == '.' && p == '=') || (c==':' && p== '=')) { currentWord.Append(c); emit(); }
                     else if (isSymbol(p) && Char.IsLetter(c)) { emit(); currentWord.Append(c); }
                     else if (isSymbol(p) && isSymbol(c)) { emit(); currentWord.Append(c); emit(); }
                     else if (isSymbol(p) && Char.IsDigit(c)) { emit(); currentWord.Append(c); } //1+2
+                    else if (isSymbol(c) && !isSymbol(p)) { emit(); currentWord.Append(c); } 
                     else currentWord.Append(c);
                 }
                 p = c;
@@ -384,6 +389,10 @@ namespace JSharp
             public AType val;
         }
 
+        public bool IsValidName(string word) {
+            return word.Where(x=>!Char.IsDigit(x) && !Char.IsLetter(x)).Count() == 0;
+        }
+        
         public AType parse(string cmd) {
             //var parts = cmd.Split(' ');
             
@@ -397,7 +406,8 @@ namespace JSharp
             Func<Token, bool> isAdverb = (token) => token.word != null && Adverbs.Words.Contains(token.word);
             Func<Token, bool> isNoun = (token) => (token.val != null && token.val.GetType() != typeof(A<Verb>));
             Func<Token, bool> isEdgeOrNotConj = (token) => isEdge(token) || isVerb(token) || isNoun(token) || token.word == "";
-
+            Func<Token, bool> isName = (token) => IsValidName(token.word);
+            
             var words = toWords(cmd);
 
             var stack = new Stack<Token>();
@@ -420,9 +430,10 @@ namespace JSharp
                 else if (isEdgeOrNotConj(w1) && isVerb(w2) && isVerb(w3) && isNoun(w4)) { step = 1; }
                 else if (isEdgeOrNotConj(w1) && isNoun(w2) && isVerb(w3) && isNoun(w4)) { step = 2; }
                 else if (isEdgeOrNotConj(w1) && (isNoun(w2) || isVerb(w2)) && isAdverb(w3) && true) { step = 3; } //adverb
+                else if ((isNoun(w1) || isName(w1)) && (w2.word == "=:" || w2.word == "=.") && true && true) { step = 7; }
                 else if (w1.word == "(" && isNoun(w2) && w3.word == ")" && true) { step = 8; }
 
-                //Console.WriteLine(step);
+                Console.WriteLine(step);
                 if (step >= 0) {
                     if (step == 0) { //monad
                         var p1 = stack.Pop();
@@ -462,6 +473,12 @@ namespace JSharp
                         stack.Push(new Token { val = z });
                         stack.Push(p1);
                     }
+                    else if (step == 7) {
+                        var name = stack.Pop();
+                        var copula = stack.Pop();
+                        var rhs = stack.Pop();
+                        stack.Push(rhs);
+                    }
                     else if (step == 8) {
                         var lpar = stack.Pop();
                         var x = stack.Pop();
@@ -474,7 +491,7 @@ namespace JSharp
                         var newWord = queue.Dequeue();
 
                         //try to parse word before putting on stack
-                        var val = AType.MakeA(newWord.word);
+                        var val = AType.MakeA(newWord.word, this);
                         var token = new Token();
                         if (val.GetType() == typeof(A<Undefined>)) {
                             token.word = newWord.word;
@@ -538,6 +555,8 @@ namespace JSharp
             tests["op with no spaces"] = () => equals(toWords("1+i. 10"), new string[] { "1", "+", "i.", "10" });
             tests["adverb +/"] = () => equals(toWords("+/ 1 2 3"), new string[] { "+", "/", "1 2 3" });
             tests["no spaces 1+2"] = () => equals(toWords("1+2"), new string[] { "1", "+", "2" });
+            tests["copula abc =: '123'"] = () => equals(toWords("abc =: '123'"), new string[] { "abc", "=:", "'123'" });
+            tests["copula abc=:'123'"] = () => equals(toWords("abc=:'123'"), new string[] { "abc", "=:", "'123'" });
 
             foreach (var key in tests.Keys) {
                 if (!tests[key]()) {
