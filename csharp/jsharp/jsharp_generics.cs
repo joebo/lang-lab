@@ -10,6 +10,7 @@ namespace App {
     {
         public static void Main(string[] args)
         {
+            //System.Diagnostics.Debugger.Launch();
             if (args.Length > 0)
             {
                 long kbAtExecution = GC.GetTotalMemory(false) / 1024;
@@ -183,7 +184,10 @@ namespace JSharp
         }
 
         public static AType Call1(AType verb, AType y)  {
-            return reduce<long>(verb, (A<long>)y);
+            if (y.GetType() == typeof(A<long>)) {
+                return reduce<long>(verb, (A<long>)y);
+            }
+            throw new NotImplementedException();
         }
     }
     
@@ -206,12 +210,12 @@ namespace JSharp
             return (T) ((dynamic)a+((T)(dynamic)b));
         }
         
-        public static A<long> addi<T,T2>(A<T> x, A<T2> y)  where T : struct where T2 : struct { 
+        public static A<long> addi(A<long> x, A<long> y) { 
             var z = new A<long>(y.Ravel.Length);
             for(var i = 0; i < y.Ravel.Length; i++) {                   
-                z.Set(i, Convert.ToInt32(Add(x.Ravel[0], y.Ravel[i])));
+                z.Ravel[i] = x.Ravel[0] + y.Ravel[i];
             }
-            return (A<long>)z;
+            return z;
         }
         public static A<double> addd<T,T2>(A<T> x, A<T2> y)  where T : struct where T2 : struct { 
             var z = new A<double>(y.Ravel.Length);
@@ -275,9 +279,6 @@ namespace JSharp
             if (op == "+") {
                 if (x.GetType() == typeof(A<long>) && y.GetType() == typeof(A<long>)) { 
                     return Verbs.addi((A<long>)x,(A<long>)y);
-                }
-                else if (x.GetType() == typeof(A<int>) && y.GetType() == typeof(A<int>)) { 
-                    return Verbs.addi((A<int>)x,(A<int>)y);
                 }
                 else if (x.GetType() == typeof(A<double>) && y.GetType() == typeof(A<double>)) { 
                     return Verbs.addd((A<double>)x,(A<double>)y);
