@@ -12,7 +12,6 @@ namespace App {
     {
         public static void Main(string[] args)
         {
-            //System.Diagnostics.Debugger.Launch();
             if (args.Length > 0)
             {
                 long kbAtExecution = GC.GetTotalMemory(false) / 1024;
@@ -48,22 +47,16 @@ namespace JSharp
             int val;
             double vald;
             if (word.StartsWith("'")) {
-                /*
-                  Count = 1; //word.Length - 2;
-                  rs = new string[] { word.Substring(1, word.Length-2) };
-                  Type = Type.String;
-                  Rank = 0;
-                  Shape = new long[] { 1 };
-                */
+                var str = word.Substring(1, word.Length-2);
+                var a = new A<JString>(1);
+                a.Ravel[0] = new JString { str = str };
+                return a;
             }
             if (word.Contains(" ") && !word.Contains(".")) {
                 var longs = new List<long>();
                 foreach (var part in word.Split(' ')) {
                     longs.Add(Int32.Parse(part));
                 }
-                //Rank = 1;
-                
-                //Type = Type.Int;
                 var a = new A<long>(longs.Count);
                 a.Ravel = longs.ToArray();
                 return a;
@@ -74,9 +67,6 @@ namespace JSharp
                 return a;
             }
             else if (Double.TryParse(word, out vald)) {
-                //Rank = 1;
-                
-                //Type = Type.Int;
                 var a = new A<double>(1);
                 a.Ravel[0] = vald;
                 return a;
@@ -94,9 +84,18 @@ namespace JSharp
     
     public struct Verb {
         public string op;
+        public string adverb;
     }
-    
+
+    //tbd should we use chars instead?
+    public struct JString {
+        public string str;
+        public override string ToString() {
+            return str;
+        }
+    }
     public class A<T> : AType where T : struct {
+
         public T[] Ravel;
         public long Count { get { return Ravel.Length; } }
 
@@ -140,18 +139,65 @@ namespace JSharp
                 var ret = z.ToString();
                 ret = ret.Substring(0, ret.Length - (Shape.Length-1));
                 return ret;
-
             }
         }
     }
 
+    public class Adverbs {
+        public static string[] Words = new string[] { "/" };
+
+        //todo move to utility
+        public static long prod(long[] ri) {
+            return ri.Aggregate(1L, (prod, next)=> prod*next);
+        }
+
+        public static A<T> reduce<T>(AType op, A<T> y) where T : struct {
+            if (y.Rank == 1) {
+                var v = new A<T>(1);
+                for (var i = 0; i < y.Count; i++) {
+                    var yi = new A<T>(1);
+                    yi.Ravel[0] = y.Ravel[i];
+                    v = (A<T>)Verbs.Call2(op, v, yi); //copy the ith item for procesing
+                }
+                return v;
+            } else {
+                var newShape = y.Shape.Skip(1).ToArray();
+                var ct = prod(newShape);
+                
+                var v = new A<T>(ct);
+                for(var i = 0; i < ct; i++) {
+                    for(var k = 0; k < y.Shape[0];k++) {
+                        var n = i+(k*ct);
+
+                        var yi = new A<T>(1);
+                        yi.Ravel[0] = y.Ravel[n];
+
+                        var vi = new A<T>(1);
+                        vi.Ravel[0] = v.Ravel[i];
+
+                        v.Ravel[i] = ((A<T>)Verbs.Call2(op, vi, yi)).Ravel[0]; //copy the ith item for procesing
+                    }
+                }
+                return v;
+            }
+            
+            throw new NotImplementedException();
+        }
+
+        public static AType Call1(AType verb, AType y)  {
+            return reduce<long>(verb, (A<long>)y);
+        }
+    }
+    
     public class Verbs {
 
         public static string[] Words = new string[] { "+", "i.", "$" };
         
         public static A<long> iota<T>(A<T> y) where T : struct  {
-            int k = Convert.ToInt32(y.Ravel[0]);
+            var shape = y.Ravel.Cast<long>().ToArray();
+            long k = prod(shape);
             var z = new A<long>(k);
+            if (y.Rank > 0) { z.Shape = shape; }
             for(var i = 0; i < k; i++) {
                 z.Ravel[i] = i;
             }
@@ -193,44 +239,49 @@ namespace JSharp
             long offset = 0;
             var ylen = y.Count;
             var v = new A<T2>((int)ct, x.Ravel);
-            /*
-            char[] chars = null;
-
-            if (y.Type == Type.String) {
-                chars = new char[ct];
-                ylen = y.rs[0].Length;
-            } else {
-                v = new A(y.Type, ct, x.Rank, x.ri);
-
-            }
-            */
-            
             for(var i = 0; i < ct; i++ ) {
                 v.Ravel[i] = y.Ravel[offset];
                 offset++;
                 if (offset > ylen-1) { offset = 0; }
             }
-            /*
-            if (y.Type == Type.String) {
-
-                var size = x.ri[0];
-                var len = x.ri[1];
-                v = new A(y.Type, size, x.Rank, new long[] { size, 1 });
-                for(var i = 0; i < size; i++) {
-                    //intern string saves 4x memory in simple test and 20% slower
-                    v.rs[i] = String.Intern(new String(chars, (int)(i*len), (int)len));
-                }
-            }
-            */
             return v;
         }
-        
+
+        public static A<JString> reshape_str(A<long> x, A<JString> y) {
+            var ct = prod(x.Ravel);
+            long offset = 0;
+            var ylen = y.Count;
+            
+            char[] chars = new char[ct];
+            ylen = y.Ravel[0].str.Length;
+                        
+            for(var i = 0; i < ct; i++ ) {
+                chars[i] = y.Ravel[0].str[(int)offset];
+                offset++;
+                if (offset > ylen-1) { offset = 0; }
+            }
+            var size = x.Ravel[0];
+            var len = x.Ravel[1];
+            var v = new A<JString>(size, new long[] { size, 1 });
+            for(var i = 0; i < size; i++) {
+                //intern string saves 4x memory in simple test and 20% slower
+                v.Ravel[i].str =  String.Intern(new String(chars, (int)(i*len), (int)len));
+                //v.Ravel[i].str =  new String(chars, (int)(i*len), (int)len);
+            }
+            
+            return v;
+        }
+
         public static AType Call2(AType method, AType x, AType y)  {
             var op = ((A<Verb>) method).Ravel[0].op;
             if (op == "+") {
-                if (x.GetType() == typeof(A<int>) && y.GetType() == typeof(A<int>)) { 
+                if (x.GetType() == typeof(A<long>) && y.GetType() == typeof(A<long>)) { 
+                    return Verbs.addi((A<long>)x,(A<long>)y);
+                }
+                else if (x.GetType() == typeof(A<int>) && y.GetType() == typeof(A<int>)) { 
                     return Verbs.addi((A<int>)x,(A<int>)y);
-                } else if (x.GetType() == typeof(A<double>) && y.GetType() == typeof(A<double>)) { 
+                }
+                else if (x.GetType() == typeof(A<double>) && y.GetType() == typeof(A<double>)) { 
                     return Verbs.addd((A<double>)x,(A<double>)y);
                 }
             } else if (op == "$") {
@@ -240,6 +291,8 @@ namespace JSharp
                     }
                     else if (y.GetType() == typeof(A<double>)) {
                         return Verbs.reshape((A<long>)x,(A<double>)y);
+                    } else if (y.GetType() == typeof(A<JString>)) {
+                        return Verbs.reshape_str((A<long>)x,(A<JString>)y);
                     }
                 }
             }
@@ -247,7 +300,11 @@ namespace JSharp
         }
 
         public static AType Call1(AType method, AType y)  {
-            var op = ((A<Verb>) method).Ravel[0].op;
+            var verb = ((A<Verb>) method).Ravel[0];
+            if (verb.adverb != null) {
+                return Adverbs.Call1(method, y);
+            }
+            var op = verb.op;
             if (op == "i.") {
                 if (y.GetType() == typeof(A<int>)) {
                     return Verbs.iota((A<int>)y);
@@ -307,7 +364,7 @@ namespace JSharp
 
             Func<Token, bool> isEdge = (token) => token.word == MARKER || token.word == "=:" || token.word == "(";
             Func<Token, bool> isVerb = (token) => (token.val != null && token.val.GetType() == typeof(A<Verb>)); //|| (token.word != null && verbs.ContainsKey(token.word));
-            Func<Token, bool> isAdverb = (token) => false; //token.word != null && adverbs.ContainsKey(token.word);
+            Func<Token, bool> isAdverb = (token) => token.word != null && Adverbs.Words.Contains(token.word);
             Func<Token, bool> isNoun = (token) => (token.val != null && token.val.GetType() != typeof(A<Verb>));
             Func<Token, bool> isEdgeOrNotConj = (token) => isEdge(token) || isVerb(token) || isNoun(token) || token.word == "";
 
@@ -366,16 +423,14 @@ namespace JSharp
                         stack.Push(p1);
                     }
                     else if (step == 3) { //adverb
-                        /*
-                          var p1 = stack.Pop();
-                          var op = stack.Pop();
-                          var adv = stack.Pop();
-                          var y = (op.val == null) ? verbs[op.word] : op.val;
-                          var z = makeVerb(y.Verb.monad, y.Verb.dyad);
-                          z.Verb.adverb = adverbs[adv.word];
-                          stack.Push(new Token { val = z });
-                          stack.Push(p1);
-                      */
+                        var p1 = stack.Pop();
+                        var op = stack.Pop();
+                        var adv = stack.Pop();
+                        var z = new A<Verb>(1);
+                        z.Ravel[0] = ((A<Verb>)op.val).Ravel[0];
+                        z.Ravel[0].adverb = adv.word;
+                        stack.Push(new Token { val = z });
+                        stack.Push(p1);
                     }
                     else if (step == 8) {
                         var lpar = stack.Pop();
@@ -424,7 +479,9 @@ namespace JSharp
             eqTests["shape iota simple"] = pair(parse("$ i. 3").ToString(), "3");
             eqTests["reshape int"] = pair(parse("3 $ 3").ToString(),"3 3 3");
             eqTests["reshape double"] = pair(parse("3 $ 3.2").ToString(),"3.2 3.2 3.2");
-
+            eqTests["reshape string"] = pair(parse("3 2 $ 'abc'").ToString(),"ab\nca\nbc");
+            eqTests["adverb simple"] = pair(parse("+/ i. 4").ToString(), "6");
+            eqTests["multi-dimensional sum"] = pair(parse("+/ i. 2 3").ToString(),"3 5 7");
             foreach (var key in eqTests.Keys) {
                 var x=eqTests[key][0];
                 var y=eqTests[key][1];
