@@ -57,7 +57,11 @@ namespace JSharp
         public static AType MakeA(string word, Parser environment)  {
             int val;
             double vald;
-            if (word.StartsWith("'")) {
+
+            if (environment.Names.ContainsKey(word)) {
+                return environment.Names[word];
+            }
+            else if (word.StartsWith("'")) {
                 var str = word.Substring(1, word.Length-2);
                 var a = new A<JString>(1);
                 a.Ravel[0] = new JString { str = str };
@@ -156,14 +160,18 @@ namespace JSharp
 
     public class Adverbs {
         public static string[] Words = new string[] { "/" };
-
+        public Verbs Verbs;
+        public Adverbs(Verbs verbs) {
+            Verbs = verbs;
+        }
+        
         //todo move to utility
-        public static long prod(long[] ri) {
+        public long prod(long[] ri) {
             return ri.Aggregate(1L, (prod, next)=> prod*next);
         }
 
         //special code for +/ rank 1
-        public static A<long> reduceplus(A<long> y) {
+        public A<long> reduceplus(A<long> y) {
             var v = new A<long>(1);
             long total = 0;
             for (var i = 0; i < y.Count; i++) {
@@ -173,7 +181,7 @@ namespace JSharp
             return v;
         }
         
-        public static A<T> reduce<T>(AType op, A<T> y) where T : struct {
+        public A<T> reduce<T>(AType op, A<T> y) where T : struct {
             if (y.Rank == 1) {
                 var v = new A<T>(1);
                 for (var i = 0; i < y.Count; i++) {
@@ -206,7 +214,7 @@ namespace JSharp
             throw new NotImplementedException();
         }
 
-        public static AType Call1(AType verb, AType y)  {
+        public AType Call1(AType verb, AType y)  {
             var adverb = ((A<Verb>)verb).Ravel[0].adverb;
             var op = ((A<Verb>)verb).Ravel[0].op;
             if (adverb == "/" && op == "+" && y.Rank == 1 && y.GetType() == typeof(A<long>)) {
@@ -224,8 +232,10 @@ namespace JSharp
     public class Verbs {
 
         public static string[] Words = new string[] { "+", "i.", "$", "=" };
+        public Adverbs Adverbs=null;
+
         
-        public static A<long> iota<T>(A<T> y) where T : struct  {
+        public A<long> iota<T>(A<T> y) where T : struct  {
             var shape = y.Ravel.Cast<long>().ToArray();
             long k = prod(shape);
             var z = new A<long>(k);
@@ -236,18 +246,18 @@ namespace JSharp
             return z;
         }
         
-        static T Add<T, T2>(T a, T2 b) {
+        T Add<T, T2>(T a, T2 b) {
             return (T) ((dynamic)a+((T)(dynamic)b));
         }
         
-        public static A<long> addi(A<long> x, A<long> y) { 
+        public A<long> addi(A<long> x, A<long> y) { 
             var z = new A<long>(y.Ravel.Length, y.Shape);
             for(var i = 0; i < y.Ravel.Length; i++) {                   
                 z.Ravel[i] = x.Ravel[0] + y.Ravel[i];
             }
             return z;
         }
-        public static A<double> addd<T,T2>(A<T> x, A<T2> y)  where T : struct where T2 : struct { 
+        public A<double> addd<T,T2>(A<T> x, A<T2> y)  where T : struct where T2 : struct { 
             var z = new A<double>(y.Ravel.Length, y.Shape);
             for(var i = 0; i < y.Ravel.Length; i++) {                   
                 z.Set(i, Convert.ToDouble(Add(x.Ravel[0], y.Ravel[i])));
@@ -255,17 +265,17 @@ namespace JSharp
             return (A<double>)z;
         }
 
-        public static A<long> shape(AType y) {
+        public A<long> shape(AType y) {
             var v = new A<long>(y.Rank);
             v.Ravel = y.Shape;
             return v;
         }
 
-        public static long prod(long[] ri) {
+        public long prod(long[] ri) {
             return ri.Aggregate(1L, (prod, next)=> prod*next);
         }
 
-        public static A<T2> reshape<T2>(A<long> x, A<T2> y) where T2 : struct {
+        public A<T2> reshape<T2>(A<long> x, A<T2> y) where T2 : struct {
 
             var ct = prod(x.Ravel);
             long offset = 0;
@@ -279,7 +289,7 @@ namespace JSharp
             return v;
         }
 
-        public static A<JString> reshape_str(A<long> x, A<JString> y) {
+        public A<JString> reshape_str(A<long> x, A<JString> y) {
             var ct = prod(x.Ravel);
             long offset = 0;
             var ylen = y.Count;
@@ -304,31 +314,31 @@ namespace JSharp
             return v;
         }
 
-        public static AType Call2(AType method, AType x, AType y)  {
+        public AType Call2(AType method, AType x, AType y)  {
             var op = ((A<Verb>) method).Ravel[0].op;
             if (op == "+") {
                 if (x.GetType() == typeof(A<long>) && y.GetType() == typeof(A<long>)) { 
-                    return Verbs.addi((A<long>)x,(A<long>)y);
+                    return addi((A<long>)x,(A<long>)y);
                 }
                 else if (x.GetType() == typeof(A<double>) && y.GetType() == typeof(A<double>)) { 
-                    return Verbs.addd((A<double>)x,(A<double>)y);
+                    return addd((A<double>)x,(A<double>)y);
                 }
             } else if (op == "$") {
                 if (x.GetType() == typeof(A<long>)) {
                     if (y.GetType() == typeof(A<long>)) {
-                        return Verbs.reshape((A<long>)x,(A<long>)y);
+                        return reshape((A<long>)x,(A<long>)y);
                     }
                     else if (y.GetType() == typeof(A<double>)) {
-                        return Verbs.reshape((A<long>)x,(A<double>)y);
+                        return reshape((A<long>)x,(A<double>)y);
                     } else if (y.GetType() == typeof(A<JString>)) {
-                        return Verbs.reshape_str((A<long>)x,(A<JString>)y);
+                        return reshape_str((A<long>)x,(A<JString>)y);
                     }
                 }
             }
             throw new ArgumentException();
         }
 
-        public static AType Call1(AType method, AType y)  {
+        public AType Call1(AType method, AType y)  {
             var verb = ((A<Verb>) method).Ravel[0];
             if (verb.adverb != null) {
                 return Adverbs.Call1(method, y);
@@ -336,13 +346,13 @@ namespace JSharp
             var op = verb.op;
             if (op == "i.") {
                 if (y.GetType() == typeof(A<int>)) {
-                    return Verbs.iota((A<int>)y);
+                    return iota((A<int>)y);
                 }
                 else if (y.GetType() == typeof(A<long>)) {
-                    return Verbs.iota((A<long>)y);
+                    return iota((A<long>)y);
                 }
             } else if (op == "$") {
-                return Verbs.shape(y);
+                return shape(y);
             }
             throw new ArgumentException();
         }
@@ -350,6 +360,18 @@ namespace JSharp
 
 
     public class Parser {
+
+        public Verbs Verbs;
+        public Adverbs Adverbs;
+        public Dictionary<string, AType> Names;
+        
+        public Parser() {
+            Verbs = new Verbs();
+            Adverbs = new Adverbs(Verbs);
+            Verbs.Adverbs = Adverbs;
+            Names = new Dictionary<string, AType>();
+        }
+        
         public string[] toWords(string w) {
             var z = new List<string>();
             var currentWord = new StringBuilder();
@@ -390,6 +412,7 @@ namespace JSharp
         }
 
         public bool IsValidName(string word) {
+            if (word == null) { return false; }
             return word.Where(x=>!Char.IsDigit(x) && !Char.IsLetter(x)).Count() == 0;
         }
         
@@ -415,6 +438,8 @@ namespace JSharp
             for (var k = words.Length - 1; k >= 0; k--) {
                 queue.Enqueue(new Token { word = words[k] });
             }
+
+            
             int i = 0;
             //just a safety check for now
             while (i < 100) {
@@ -433,7 +458,7 @@ namespace JSharp
                 else if ((isNoun(w1) || isName(w1)) && (w2.word == "=:" || w2.word == "=.") && true && true) { step = 7; }
                 else if (w1.word == "(" && isNoun(w2) && w3.word == ")" && true) { step = 8; }
 
-                Console.WriteLine(step);
+                //Console.WriteLine(step);
                 if (step >= 0) {
                     if (step == 0) { //monad
                         var p1 = stack.Pop();
@@ -477,6 +502,7 @@ namespace JSharp
                         var name = stack.Pop();
                         var copula = stack.Pop();
                         var rhs = stack.Pop();
+                        Names[name.word] = rhs.val;
                         stack.Push(rhs);
                     }
                     else if (step == 8) {
@@ -579,6 +605,8 @@ namespace JSharp
             eqTests["multi-dimensional sum"] = pair(parse("+/ i. 2 3").ToString(),"3 5 7");
             eqTests["multi-dimensional sum higher rank"] = pair(parse("+/ i. 2 2 2").ToString(),"4 6\n8 10");
             eqTests["multi-dimensional sum higher rank 2"] = pair(parse("+/ i. 4 3 2").ToString(),"36 40\n44 48\n52 56");
+            eqTests["assignment"] = pair(parse("a + a=:5").ToString(),"10");
+            
 
             foreach (var key in eqTests.Keys) {
                 var x=eqTests[key][0];
