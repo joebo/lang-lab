@@ -16,13 +16,20 @@ namespace App {
             }
             if (args.Length > 0 && args[0] != "-t")
             {
+                int times = 1;
+                if (args.Length > 1 && args[1] == "-n") {
+                    times = Int32.Parse(args[2]);
+                }
                 long kbAtExecution = GC.GetTotalMemory(false) / 1024;
                 var watch = new Stopwatch();
                 watch.Start();
-                var ret = new Parser().parse(args[0]);
+                AType ret = null;
+                for(var i = 0; i < times; i++) {
+                    ret = new Parser().parse(args[0]);
+                }
                 watch.Stop();
                 Console.WriteLine("Output: " + ret.ToString());
-                Console.WriteLine(String.Format("Took: {0} ms", watch.ElapsedMilliseconds));
+                Console.WriteLine(String.Format("Took: {0} ms", watch.ElapsedMilliseconds / (double)times));
                 long kbAfter1 = GC.GetTotalMemory(false) / 1024;
                 long kbAfter2 = GC.GetTotalMemory(true) / 1024;
 
@@ -53,7 +60,6 @@ namespace JSharp
     {
         public long[] Shape;
         public int Rank { get { return Shape.Length; } }
-
 
         public static AType MakeA(string word, Parser environment)  {
             int val;
@@ -127,9 +133,6 @@ namespace JSharp
             Shape = shape;
         }
         
-        public void Set(int n, T val) {
-            Ravel[n] = val;
-        }
         public override string ToString() {
             if (Ravel.Length == 1) {
                 return Ravel[0].ToString();
@@ -156,6 +159,12 @@ namespace JSharp
                 ret = ret.Substring(0, ret.Length - (Shape.Length-1));
                 return ret;
             }
+        }
+
+        public A<T2> CopyTo<T2>() where T2 : struct {
+            A<T2> z = new A<T2>(Count, Shape);
+            z.Ravel = Ravel.Cast<T2>().ToArray();
+            return z;
         }
     }
 
@@ -218,6 +227,8 @@ namespace JSharp
         public AType Call1(AType verb, AType y)  {
             var adverb = ((A<Verb>)verb).Ravel[0].adverb;
             var op = ((A<Verb>)verb).Ravel[0].op;
+
+            //special code for +/
             if (adverb == "/" && op == "+" && y.Rank == 1 && y.GetType() == typeof(A<long>)) {
                 return reduceplus((A<long>)y);
             }
@@ -232,7 +243,7 @@ namespace JSharp
     
     public class Verbs {
 
-        public static string[] Words = new string[] { "+", "i.", "$", "=" };
+        public static string[] Words = new string[] { "+", "-", "*", "%", "i.", "$", "=" };
         public Adverbs Adverbs=null;
 
         
@@ -246,24 +257,36 @@ namespace JSharp
             }
             return z;
         }
-        
+
         T Add<T, T2>(T a, T2 b) {
             return (T) ((dynamic)a+((T)(dynamic)b));
         }
+
         
-        public A<long> addi(A<long> x, A<long> y) { 
+        public A<long> mathi(A<long> x, A<long> y, Func<long, long, long> op) { 
             var z = new A<long>(y.Ravel.Length, y.Shape);
-            for(var i = 0; i < y.Ravel.Length; i++) {                   
-                z.Ravel[i] = x.Ravel[0] + y.Ravel[i];
+            for(var i = 0; i < y.Ravel.Length; i++) {
+                //lambdas add about 3% overhead based upon tests of 100 times, for now worth it for code clarity
+                z.Ravel[i] = op(x.Ravel[0], y.Ravel[i]);
+                //z.Ravel[i] = x.Ravel[0] +  y.Ravel[i];
             }
             return z;
         }
-        public A<double> addd<T,T2>(A<T> x, A<T2> y)  where T : struct where T2 : struct { 
+        public A<double> mathd(A<double> x, A<double> y, Func<double, double, double> op) { 
+            var z = new A<double>(y.Ravel.Length, y.Shape);
+            for(var i = 0; i < y.Ravel.Length; i++) {
+                z.Ravel[i] = op(x.Ravel[0], y.Ravel[i]);
+            }
+            return z;
+        }
+
+        //dynamic dispatch of math operations -- slowest, around 7x slower
+        public A<double> mathmixed(dynamic x, dynamic y, Func<dynamic, dynamic, dynamic> op) { 
             var z = new A<double>(y.Ravel.Length, y.Shape);
             for(var i = 0; i < y.Ravel.Length; i++) {                   
-                z.Set(i, Convert.ToDouble(Add(x.Ravel[0], y.Ravel[i])));
+                z.Ravel[i] = op(x.Ravel[0], y.Ravel[i]);
             }
-            return (A<double>)z;
+            return z;
         }
 
         public A<long> shape(AType y) {
@@ -318,13 +341,62 @@ namespace JSharp
         public AType Call2(AType method, AType x, AType y)  {
             var op = ((A<Verb>) method).Ravel[0].op;
             if (op == "+") {
-                if (x.GetType() == typeof(A<long>) && y.GetType() == typeof(A<long>)) { 
-                    return addi((A<long>)x,(A<long>)y);
+                if (x.GetType() == typeof(A<long>) && y.GetType() == typeof(A<long>)) {
+                    return mathi((A<long>)x,(A<long>)y, (a,b)=>a+b);
                 }
                 else if (x.GetType() == typeof(A<double>) && y.GetType() == typeof(A<double>)) { 
-                    return addd((A<double>)x,(A<double>)y);
+                    return mathd((A<double>)x,(A<double>)y, (a,b)=>a+b);
                 }
-            } else if (op == "$") {
+                else if (x.GetType() != y.GetType()) {
+                    return mathmixed(x,y, (a,b)=>a+b);
+                }
+
+            }
+            else if (op == "-") {
+                if (x.GetType() == typeof(A<long>) && y.GetType() == typeof(A<long>)) {
+                    return mathi((A<long>)x,(A<long>)y, (a,b)=>a-b);
+                }
+                else if (x.GetType() == typeof(A<double>) && y.GetType() == typeof(A<double>)) {
+                    return mathd((A<double>)x,(A<double>)y, (a,b)=>a-b);
+                }
+                else if (x.GetType() != y.GetType()) {
+                    return mathmixed(x,y, (a,b)=>a-b);
+                }
+
+            }
+            else if (op == "*") {
+                if (x.GetType() == typeof(A<long>) && y.GetType() == typeof(A<long>)) {
+                    return mathi((A<long>)x,(A<long>)y, (a,b)=>a*b);
+                }
+                else if (x.GetType() == typeof(A<double>) && y.GetType() == typeof(A<double>)) {
+                    return mathd((A<double>)x,(A<double>)y, (a,b)=>a*b);
+                }
+                else if (x.GetType() != y.GetType()) {
+                    return mathmixed(x,y, (a,b)=>a*b);
+                }
+            }
+            else if (op == "%") {
+                if (x.GetType() == typeof(A<long>) && y.GetType() == typeof(A<long>)) {
+                    //always convert to double for division
+                    var a1 = ((A<long>)x);
+                    var b1 = ((A<long>)y);
+                    
+                    var a2 = new A<double>(a1.Count, x.Shape);
+                    a2.Ravel = a1.Ravel.Select(d=>(double)d).ToArray();
+
+                    var b2= new A<double>(b1.Count, y.Shape);
+                    b2.Ravel = b1.Ravel.Select(d=>(double)d).ToArray();
+                    
+                    return mathd(a2,b2, (a,b)=>a/b);
+                }
+                else {
+                    //division using dynamic is about 7x slower
+                    return mathmixed(x,y, (a,b)=>(double)a/(double)b);
+                }
+
+            }
+
+            else if (op == "$") {
                 if (x.GetType() == typeof(A<long>)) {
                     if (y.GetType() == typeof(A<long>)) {
                         return reshape((A<long>)x,(A<long>)y);
@@ -499,14 +571,14 @@ namespace JSharp
                         stack.Push(new Token { val = z });
                         stack.Push(p1);
                     }
-                    else if (step == 7) {
+                    else if (step == 7) { //copula
                         var name = stack.Pop();
                         var copula = stack.Pop();
                         var rhs = stack.Pop();
                         Names[name.word] = rhs.val;
                         stack.Push(rhs);
                     }
-                    else if (step == 8) {
+                    else if (step == 8) { //paren
                         var lpar = stack.Pop();
                         var x = stack.Pop();
                         var rpar = stack.Pop();
@@ -608,6 +680,24 @@ namespace JSharp
             }
 
             var eqTests = new Dictionary<string, object[]>();
+            eqTests["add"] = pair(parse("1 + 2").ToString(), "3");
+            eqTests["add float"] = pair(parse("1.5 + 2.5").ToString(), "4");
+            eqTests["add float + int"] = pair(parse("4.5 + 3").ToString(), "7.5");
+
+            eqTests["subtract"] = pair(parse("4 - 3").ToString(), "1");
+            eqTests["subtract float - int"] = pair(parse("4.5 - 3").ToString(), "1.5");
+            eqTests["subtract int - float"] = pair(parse("4 - 3.5").ToString(), "0.5");
+
+
+            eqTests["multiply int"] = pair(parse("2 * 3").ToString(), "6");
+            eqTests["multiply float"] = pair(parse("2.5 * 2.5").ToString(), "6.25");
+            eqTests["multiply int*float"] = pair(parse("2 * 2.5").ToString(), "5");
+
+            eqTests["divide int"] = pair(parse("10 % 2").ToString(), "5");
+            eqTests["divide float"] = pair(parse("1 % 4").ToString(), "0.25");
+
+
+
             eqTests["iota simple"] = pair(parse("i. 3").ToString(), "0 1 2");
             eqTests["shape iota simple"] = pair(parse("$ i. 3").ToString(), "3");
             eqTests["reshape int"] = pair(parse("3 $ 3").ToString(),"3 3 3");
