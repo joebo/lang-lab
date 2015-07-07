@@ -36,8 +36,9 @@ namespace App {
             }
             else {
                 string line = "";
+                var parser = new Parser();
                 while((line = Console.ReadLine()) != "exit") {
-                    var ret = new Parser().parse(line);
+                    var ret = parser.parse(line);
                     Console.WriteLine(ret.ToString());
                 }
             }
@@ -584,6 +585,13 @@ namespace JSharp
             tests["copula abc =: '123'"] = () => equals(toWords("abc =: '123'"), new string[] { "abc", "=:", "'123'" });
             tests["copula abc=:'123'"] = () => equals(toWords("abc=:'123'"), new string[] { "abc", "=:", "'123'" });
 
+            tests["verb assignment"] =() => {
+                var parser = new Parser();
+                parser.parse("plus=: +");
+                var z =  parser.parse("1 plus 2").ToString();
+                return z == "3";
+            };
+            
             foreach (var key in tests.Keys) {
                 if (!tests[key]()) {
                     //throw new ApplicationException(key);
@@ -606,6 +614,7 @@ namespace JSharp
             eqTests["multi-dimensional sum higher rank"] = pair(parse("+/ i. 2 2 2").ToString(),"4 6\n8 10");
             eqTests["multi-dimensional sum higher rank 2"] = pair(parse("+/ i. 4 3 2").ToString(),"36 40\n44 48\n52 56");
             eqTests["assignment"] = pair(parse("a + a=:5").ToString(),"10");
+            
             
 
             foreach (var key in eqTests.Keys) {
