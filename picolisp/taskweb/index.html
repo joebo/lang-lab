@@ -1,0 +1,95 @@
+<!doctype html>
+<title>Todo app</title>
+<script src="mithril.min.js"></script>
+<body>
+<script>
+var todo = (function(c) {
+     var Todo = function(data) {
+         this.description = m.prop(data.description);
+         this.done = m.prop(false);
+     };
+
+    //could use vm in the future if needed
+    var list = m.request({method: "GET", url: "/!todo-list", type: Todo})
+    var description = m.prop("");
+
+    c.add = function() {
+       if (description()) {
+           list().push(new Todo({description: description()}));
+           description("");
+       }
+    }
+
+    c.view = function() {
+        return [
+            m("input", {onchange: m.withAttr("value", description), value: description()}),
+            m("button", {onclick: c.add}, "Add"),
+            m("table", [
+                list().map(function(task, index) {
+                    return m("tr", [
+                        m("td", [
+                            m("input[type=checkbox]", {onclick: m.withAttr("checked", task.done), checked: task.done()})
+                        ]),
+                        m("td", {style: {textDecoration: task.done() ? "line-through" : "none"}}, task.description()),
+                    ])
+                })
+            ])
+        ]
+    };
+
+    c.controller = function() { return c; }
+    return c;
+})({});
+
+
+var login = (function(c) {
+
+    var msg = m.prop("Welcome, please log in below.");
+    
+    var vm = {
+        username : m.prop(""),
+        password : m.prop("")
+    }
+
+    //return ourself to reduce nesting instead of adding methods to controller
+    c.controller = function() { return c; }
+
+    
+    var serializer = function(data) {
+        return '*Data=' + encodeURIComponent(JSON.stringify(vm));
+    }
+    
+    c.login = function() {
+        m.request({method: "POST", url: "/!user-auth", data: vm, serialize: serializer}).then(function(json) {
+            if (json.session) {
+                m.route("/todo");
+            }
+            else {
+                msg("invalid username / password");
+                console.log(msg());
+            }
+        });
+    }
+    
+    c.view = function() {
+        return [
+            m("div", msg()),
+            m("label", "username"),
+            m("input", { onchange: m.withAttr("value", vm.username) }),
+            m("label", "password"),
+            m("input[type='password']", { onchange: m.withAttr("value", vm.password) }),
+            m("button", { onclick: login.login }, "Log In")
+        ];
+    }
+    return c;
+})({});
+
+//initialize the application
+//m.mount(document.body, {controller: todo.controller, view: todo.view});
+m.route.mode = "hash";
+m.route(document.body, "/", {
+    "/" : login,
+    "/todo" : todo
+});
+</script>
+</body>
